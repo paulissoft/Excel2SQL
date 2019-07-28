@@ -118,9 +118,10 @@ public class ExternalTable {
             + "         ACCESS PARAMETERS "+ newline
             + "         ("+ newline
             + "               RECORDS DELIMITED BY NEWLINE"+ newline
-            + "               FIELD NAMES ALL FILES"+ newline
+            + "               FIELD NAMES ALL FILES IGNORE"+ newline
             + "               BADFILE load_dir:'" + getBadFileName() +"'"+ newline
-            + "               LOGFILE load_dir:'" + getLogFileName() +"'"+ newline
+            // + "               LOGFILE load_dir:'" + getLogFileName() +"'"+ newline
+            + "               NOLOGFILE"+ newline
             // + "               FIELDS TERMINATED BY ','"+newline
             + "               FIELDS DATE_FORMAT DATE MASK \"yyyy-mm-dd\" CSV WITHOUT EMBEDDED RECORD TERMINATORS"+ newline
             + "               MISSING FIELD VALUES ARE NULL"+ newline
