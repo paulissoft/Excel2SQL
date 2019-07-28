@@ -1,1 +1,7 @@
 *~
+target/
+dependency-reduced-pom.xml
+*.csv
+ExternalTables.sql
+*.log
+CZ.xls

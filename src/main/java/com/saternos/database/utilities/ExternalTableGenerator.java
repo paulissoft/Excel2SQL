@@ -8,8 +8,12 @@ import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Date;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 
 import org.apache.poi.hssf.usermodel.HSSFCell;
+import org.apache.poi.hssf.usermodel.HSSFDateUtil;
 import org.apache.poi.ss.usermodel.CellType;
 
 import org.apache.poi.hssf.usermodel.HSSFRow;
@@ -91,7 +95,8 @@ public class ExternalTableGenerator {
 
         pwd = new File("").getAbsolutePath();
 		
-        this.spreadsheet = pwd+File.separator+spreadsheet;
+        // this.spreadsheet = pwd+File.separator+spreadsheet;
+        this.spreadsheet = (new File(spreadsheet)).getAbsolutePath();
 		
     }
 
@@ -101,7 +106,7 @@ public class ExternalTableGenerator {
     private void execute() {
 
         try {
-            ddlString ="CREATE OR REPLACE DIRECTORY load_dir AS '"+pwd+"'"+newline+";"+newline+newline; 
+            ddlString ="CREATE /*OR REPLACE*/ DIRECTORY load_dir AS '"+pwd+"'"+newline+";"+newline+newline; 
 			
             POIFSFileSystem fs = new POIFSFileSystem(new FileInputStream(spreadsheet));
 			
@@ -150,6 +155,59 @@ public class ExternalTableGenerator {
 		
     }
 
+    private String getStringValue(HSSFCell cell, ExternalTableColumn col) {
+        final String value = cell.getStringCellValue();
+        
+        // Can not switch from DATE/NUMERIC to STRING
+
+        if (col.getType() == null) {
+            col.setType("STRING");
+        }
+        
+        if (col.getType().equals("STRING")) {
+            col.setLength(Math.max(col.getLength(), value.length()));
+        }
+
+        return value;
+    }
+
+    private String getNumericValue(HSSFCell cell, ExternalTableColumn col) {
+        String value = null;
+
+        // Can switch STRING to DATE/NUMERIC
+
+        // Test if a date! See https://poi.apache.org/help/faq.html
+        if (HSSFDateUtil.isCellDateFormatted(cell)) {
+            Date date = HSSFDateUtil.getJavaDate(cell.getNumericCellValue());
+            DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+
+            value = dateFormat.format(date);
+            col.setType("DATE");
+        } else {
+            value = "" + cell.getNumericCellValue();
+            col.setNumericPrecision(cell.getNumericCellValue());
+            col.setType("NUMERIC");
+        }
+        
+        return value;
+    }
+
+    private String getBooleanValue(HSSFCell cell, ExternalTableColumn col) {
+        final String value = "" + cell.getBooleanCellValue();
+        
+        // Treat it as a STRING. Can not switch from DATE/NUMERIC to STRING
+
+        if (col.getType() == null) {
+            col.setType("STRING");
+        }
+        
+        if (col.getType().equals("STRING")) {
+            col.setLength(Math.max(col.getLength(), value.length()));
+        }
+
+        return value;
+    }
+
     /**
      * @param content
      * @param filename
@@ -189,83 +247,72 @@ public class ExternalTableGenerator {
         //skip putting the column names and type length row in the csv
         for (int r = COLUMN_NAME_ROW; r < sheet.getPhysicalNumberOfRows(); r++) {
 
-            System.out.println("processing row " + r);
-            
             for (short c = 0; c < sheet.getRow(r).getPhysicalNumberOfCells(); c++) {
+                try {
+                
+                    HSSFCell cell = sheet.getRow(r).getCell(c);
 
-                HSSFCell cell = sheet.getRow(r).getCell(c);
-
-                ExternalTableColumn col = (r == COLUMN_NAME_ROW ? new ExternalTableColumn() : cols.get(c));
-				
-                String value = null;
-
-                if (cell == null) continue;
-
-                switch(r)
-                    {
-                    case COLUMN_NAME_ROW:
-                        value = cell.getStringCellValue();
-                        col.setName(value);
-                        cols.add(col);
-                        break;
+                    ExternalTableColumn col = (r == COLUMN_NAME_ROW ? new ExternalTableColumn() : cols.get(c));
                     
-                    case COLUMN_TYPE_ROW:
-                        // set type
-                        switch(cell.getCellType())
-                            {
-                            case FORMULA:
-                                try {
-                                    // string?
-                                    value = cell.getStringCellValue();
-                                    col.setType(CellType.STRING);
-                                } catch (Exception e) {
-                                    // numeric
-                                    col.setNumericPrecision(cell.getNumericCellValue());
-                                    col.setType(CellType.NUMERIC);
+                    String value = null;
+
+                    if (cell == null) continue;
+
+                    switch(r)
+                        {
+                        case COLUMN_NAME_ROW:
+                            value = cell.getStringCellValue();
+                            col.setName(value);
+                            cols.add(col);
+                            break;
+                    
+                        default:
+                            // column type can switch from string to numeric but not vice versa
+                            switch(cell.getCellType())
+                                {
+                                case FORMULA:
+                                    try {
+                                        value = getStringValue(cell, col);
+                                        // string?
+                                    } catch (IllegalStateException e1) {
+                                        // java.lang.IllegalStateException: Cannot get a STRING value from a NUMERIC cell
+
+                                        try {
+                                            value = getNumericValue(cell, col);
+                                        } catch (IllegalStateException e2) {
+                                            // java.lang.IllegalStateException: Cannot get a NUMERIC value from a BOOLEAN formula cell
+                                            value = getBooleanValue(cell, col);
+                                        }
+                                    }
+                                    break;
+
+                                case BLANK:
+                                case STRING:
+                                    value = getStringValue(cell, col);
+                                    break;
+                                    
+                                case BOOLEAN:
+                                    value = getBooleanValue(cell, col);
+                                    break;
+
+                                case NUMERIC:
+                                    value = getNumericValue(cell, col);
+                                    break;
+
+                                default:
+                                    throw new RuntimeException("Cell Type of cell " + col.getName() + " unknown: " + cell.getCellType()); 
                                 }
-                                break;
-
-                            case STRING:
-                            case BLANK:
-                            case BOOLEAN:
-                            case ERROR:
-                                col.setType(CellType.STRING);
-                                break;
-
-                            case NUMERIC:
-                                col.setNumericPrecision(cell.getNumericCellValue());
-                                col.setType(CellType.NUMERIC);
-                                break;
-
-                            default:
-                                throw new RuntimeException("Cell Type of cell " + col.getName() + " unknown: " + cell.getCellType()); 
-                            }
-
-                        // no break
-                        
-                    default:
-                        // update length for a string each row
-                        switch(col.getType())
-                            {
-                            case STRING:
-                                value = cell.getStringCellValue();
-                                col.setLength(Math.max(col.getLength(), value.length()));
-                                break;
-
-                            case NUMERIC:
-                                value = "" + cell.getNumericCellValue();
-                                break;
-
-                            default:
-                                throw new RuntimeException("Cell Type of col " + col.getName() + " unknown: " + col.getType()); 
-                            }
+                        }
+                    // see https://en.wikipedia.org/wiki/Comma-separated_values
+                    value.replace(enclosure, enclosure + enclosure);
+                    if (value.contains(enclosure) || value.contains(separator)) {
+                        value = enclosure + value + enclosure;
                     }
-                // see https://en.wikipedia.org/wiki/Comma-separated_values
-                value.replace(enclosure, enclosure + enclosure);
-                if (value.contains(enclosure) || value.contains(separator)) {
-                    value = enclosure + value + enclosure;
+                    csv += value + separator;
+                } catch (Exception e) {
+                    System.err.println("Error in line " + (r+1) + " for column " + (c+1));
+                    throw e;
                 }
-                csv += value + separator;
             }
             csv += newline;
         }
