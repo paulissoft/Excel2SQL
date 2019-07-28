@@ -3,6 +3,17 @@ Excel file to Oracle External Table
 
 This project is originally from the article posted on https://www.oracle.com/technetwork/articles/saternos-tables-090560.html. The author is Casimir Saternos.
 
+# Functionality
+
+Reads an Excel Spread sheet (file name passed in as an argument).  
+
+Creates a comma delimitted (.csv) file for each sheet.
+
+Creates a SQL script to creates external tables in a Oracle Database (9i or above) 
+that reference the .csv files on the file system.
+
+# Enhancements
+
 I have made the following enhancements:
 * It is now a Maven project.
 * In the article the following is stated: "The second row in each spreadsheet is used to determine the length of a VARCHAR2 field. This row is also not included in the .csv datafile. ". This requirement has been removed. The Excel should just contain a header row and data. The maximum length of a VARCHAR2 field is determined while processing the file.
