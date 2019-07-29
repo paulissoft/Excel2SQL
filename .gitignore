@@ -5,3 +5,4 @@ dependency-reduced-pom.xml
 ExternalTables.sql
 *.log
 CZ.xls
+CZ.xlsx
