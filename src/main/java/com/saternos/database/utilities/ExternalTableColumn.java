@@ -32,7 +32,7 @@ public class ExternalTableColumn {
     /**
      * Space for aligning the outputed SQL
      */
-    private final String SPACE="     ";
+    private final String SPACE="  ";
 	
     /**
      * The column type - using "NUMERIC", "STRING" or "DATE"

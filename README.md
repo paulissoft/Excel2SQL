@@ -16,6 +16,7 @@ that reference the .csv files on the file system.
 
 I have made the following enhancements:
 * It is now a Maven project.
+* Microsoft Excel Open XML Spreadsheet is now supported (xlsx extension).
 * Dates are now supported.
 * In the article the following is stated: "The second row in each spreadsheet is used to determine the length of a VARCHAR2 field. This row is also not included in the .csv datafile. ". This requirement has been removed. The Excel should just contain a header row and data. The type of a column (STRING, NUMERIC or DATE) is determined while processing the Excel and the maximum length for a STRING column field too.
 * The newest Jakarta POI is used.

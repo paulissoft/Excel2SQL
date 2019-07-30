@@ -102,7 +102,7 @@ public class ExternalTable {
      */
     public String getDdl()
     {
-        String ddl = "CREATE TABLE " +  getName() +newline+" ("+ newline;
+        String ddl = "CREATE TABLE " +  getName() +newline+"("+ newline;
 		
         Iterator iter = columns.iterator();
         while (iter.hasNext()){
@@ -112,21 +112,21 @@ public class ExternalTable {
         ddl = ddl.substring(0, ddl.lastIndexOf(","))+ //remove the last comma
             newline+
             ") "+newline+"ORGANIZATION EXTERNAL"+ newline
-            + "   (" + newline
-            + "         TYPE oracle_loader" + newline
-            + "         DEFAULT DIRECTORY load_dir"+ newline
-            + "         ACCESS PARAMETERS "+ newline
-            + "         ("+ newline
-            + "               RECORDS DELIMITED BY NEWLINE"+ newline
-            + "               FIELD NAMES ALL FILES IGNORE"+ newline
-            + "               BADFILE load_dir:'" + getBadFileName() +"'"+ newline
-            // + "               LOGFILE load_dir:'" + getLogFileName() +"'"+ newline
-            + "               NOLOGFILE"+ newline
-            // + "               FIELDS TERMINATED BY ','"+newline
-            + "               FIELDS DATE_FORMAT DATE MASK \"yyyy-mm-dd\" CSV WITHOUT EMBEDDED RECORD TERMINATORS"+ newline
-            + "               MISSING FIELD VALUES ARE NULL"+ newline
+            + "(" + newline
+            + "  TYPE oracle_loader" + newline
+            + "  DEFAULT DIRECTORY load_dir"+ newline
+            + "  ACCESS PARAMETERS "+ newline
+            + "  ("+ newline
+            + "    RECORDS DELIMITED BY NEWLINE"+ newline
+            + "    FIELD NAMES ALL FILES IGNORE"+ newline
+            + "    BADFILE load_dir:'" + getBadFileName() +"'"+ newline
+            // + "    LOGFILE load_dir:'" + getLogFileName() +"'"+ newline
+            + "    NOLOGFILE"+ newline
+            // + "    FIELDS TERMINATED BY ','"+newline
+            + "    FIELDS DATE_FORMAT DATE MASK \"yyyy-mm-dd\" CSV WITHOUT EMBEDDED RECORD TERMINATORS"+ newline
+            + "    MISSING FIELD VALUES ARE NULL"+ newline
             /*
-              + "               ( "+ newline
+              + "    ( "+ newline
             */
             ;
         /* not needed due to FIELD NAMES ALL FILES */
@@ -138,11 +138,11 @@ public class ExternalTable {
           }
           ddl = ddl.substring(0, ddl.lastIndexOf(","))
           + newline
-          + "         )";
+          + "    )";
         */
         ddl +=
-            "               )"+ newline
-            + "             LOCATION ('"+ getLocation()+"')"+ newline
+              "    )"+ newline
+            + "    LOCATION ('"+ getLocation()+"')"+ newline
             +") REJECT LIMIT UNLIMITED;"+newline+newline+newline;
 		
         return ddl;

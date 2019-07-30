@@ -11,14 +11,20 @@ import java.util.List;
 import java.util.Date;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.Iterator;
 
-import org.apache.poi.hssf.usermodel.HSSFCell;
-import org.apache.poi.hssf.usermodel.HSSFDateUtil;
+import org.apache.poi.ss.usermodel.Workbook; // interface
+import org.apache.poi.ss.usermodel.Sheet; // interface
+import org.apache.poi.ss.usermodel.Row; // interface
+import org.apache.poi.ss.usermodel.Cell; // interface
 import org.apache.poi.ss.usermodel.CellType;
 
-import org.apache.poi.hssf.usermodel.HSSFRow;
-import org.apache.poi.hssf.usermodel.HSSFSheet;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
+import org.apache.poi.ss.usermodel.DateUtil;
+
+import org.apache.poi.poifs.filesystem.OfficeXmlFileException;
 import org.apache.poi.poifs.filesystem.POIFSFileSystem;
 
 /**
@@ -43,15 +49,15 @@ public class ExternalTableGenerator {
             System.out.println(newline + "Usage: ExternalTableGenerator <excel_file_name>" + newline);
             System.exit(0);
         }
-        System.out.println("Begin processing.");
+        System.out.println("INFO: Begin processing.");
 		
         ExternalTableGenerator generator = new ExternalTableGenerator(args[0]);
 
-        System.out.println("Using working directory " + new File(generator.pwd).getAbsolutePath());
+        System.out.println("INFO: Using working directory " + new File(generator.pwd).getAbsolutePath());
 		
         generator.execute();
 		
-        System.out.println("Processing complete.");
+        System.out.println("INFO: Processing complete.");
 
     }
 	
@@ -108,9 +114,14 @@ public class ExternalTableGenerator {
         try {
             ddlString ="CREATE /*OR REPLACE*/ DIRECTORY load_dir AS '"+pwd+"'"+newline+";"+newline+newline; 
 			
-            POIFSFileSystem fs = new POIFSFileSystem(new FileInputStream(spreadsheet));
-			
-            HSSFWorkbook wb = new HSSFWorkbook(fs);
+            Workbook wb;
+            
+            try {
+                POIFSFileSystem fs = new POIFSFileSystem(new FileInputStream(spreadsheet));
+                wb = new HSSFWorkbook(fs);
+            } catch (OfficeXmlFileException e) {
+                wb = new XSSFWorkbook(new FileInputStream(spreadsheet));
+            }
 			
             processWorkbook(wb);
 			
@@ -124,12 +135,12 @@ public class ExternalTableGenerator {
      * @param sheet
      * @param table
      */
-    private void processSheet(HSSFSheet sheet, ExternalTable table) {
+    private void processSheet(Sheet sheet, ExternalTable table) {
         //Write out a .csv file based upon the sheet
-        writeCsv(sheet, table);
-
-        //Add the ddl for the table to the script
-        ddlString += table.getDdl();
+        if (writeCsv(sheet, table)) {
+            //Add the ddl for the table to the script
+            ddlString += table.getDdl();
+        }
     }
 
     /**
@@ -137,25 +148,25 @@ public class ExternalTableGenerator {
      * Iterate through each sheet in the workbook
      * and process it
      */
-    private void processWorkbook(HSSFWorkbook wb) {
+    private void processWorkbook(Workbook wb) {
         
         for (int i = 0; i < wb.getNumberOfSheets(); i++) 
             {
-                HSSFSheet sheet = wb.getSheetAt(i);
+                Sheet sheet = wb.getSheetAt(i);
 
-                System.out.println("processing sheet " + i);
+                System.out.println("INFO: Processing sheet " + i);
 
                 
                 ExternalTable table = new ExternalTable(wb.getSheetName(i));
                 
                 processSheet(sheet, table);
 			
-                System.out.println("...Table "+ table.getName() + " processed." );
+                System.out.println("INFO: Table "+ table.getName() + " processed." );
             }
 		
     }
 
-    private String getStringValue(HSSFCell cell, ExternalTableColumn col) {
+    private String getStringValue(Cell cell, ExternalTableColumn col) {
         final String value = cell.getStringCellValue();
         
         // Can not switch from DATE/NUMERIC to STRING
@@ -171,14 +182,14 @@ public class ExternalTableGenerator {
         return value;
     }
 
-    private String getNumericValue(HSSFCell cell, ExternalTableColumn col) {
+    private String getNumericValue(Cell cell, ExternalTableColumn col) {
         String value = null;
 
         // Can switch STRING to DATE/NUMERIC
 
         // Test if a date! See https://poi.apache.org/help/faq.html
-        if (HSSFDateUtil.isCellDateFormatted(cell)) {
-            Date date = HSSFDateUtil.getJavaDate(cell.getNumericCellValue());
+        if (DateUtil.isCellDateFormatted(cell)) {
+            Date date = DateUtil.getJavaDate(cell.getNumericCellValue());
             DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
 
             value = dateFormat.format(date);
@@ -192,7 +203,7 @@ public class ExternalTableGenerator {
         return value;
     }
 
-    private String getBooleanValue(HSSFCell cell, ExternalTableColumn col) {
+    private String getBooleanValue(Cell cell, ExternalTableColumn col) {
         final String value = "" + cell.getBooleanCellValue();
         
         // Treat it as a STRING. Can not switch from DATE/NUMERIC to STRING
@@ -224,7 +235,7 @@ public class ExternalTableGenerator {
             fr.flush();
             fr.close();
 			
-            System.out.println("...File " + filename + " created.");
+            System.out.println("INFO: File " + filename + " created.");
 			
         } catch (Exception e) {
             e.printStackTrace();
@@ -235,22 +246,27 @@ public class ExternalTableGenerator {
      * @param sheet
      * @param table
      */
-    private void writeCsv(HSSFSheet sheet, ExternalTable table) {
+    private Boolean writeCsv(Sheet sheet, ExternalTable table) {
 
-        HSSFRow names = sheet.getRow(COLUMN_NAME_ROW);
-        HSSFRow types = sheet.getRow(COLUMN_TYPE_ROW);
+        Row names = sheet.getRow(COLUMN_NAME_ROW);
+        Row types = sheet.getRow(COLUMN_TYPE_ROW);
 
         ArrayList<ExternalTableColumn> cols = new ArrayList<ExternalTableColumn>();
 
         String csv = "";
-		
-        //skip putting the column names and type length row in the csv
-        for (int r = COLUMN_NAME_ROW; r < sheet.getPhysicalNumberOfRows(); r++) {
 
-            for (short c = 0; c < sheet.getRow(r).getPhysicalNumberOfCells(); c++) {
+        Iterator<Row> rowIterator = sheet.rowIterator();
+            
+        //skip putting the column names and type length row in the csv
+        for (int r = COLUMN_NAME_ROW; rowIterator.hasNext(); r++) {
+
+            Row row = rowIterator.next();
+            Iterator<Cell> cellIterator = row.cellIterator();
+            
+            for (short c = 0; cellIterator.hasNext(); c++) {
                 try {
                 
-                    HSSFCell cell = sheet.getRow(r).getCell(c);
+                    Cell cell = cellIterator.next();
 
                     ExternalTableColumn col = (r == COLUMN_NAME_ROW ? new ExternalTableColumn() : cols.get(c));
                     
@@ -320,7 +336,15 @@ public class ExternalTableGenerator {
         // Set the table definition information
         table.setColumns(cols);
 
-        // Final newline causes problems so remove it
-        write(csv.substring(0, csv.length()-1), table.getLocation());
+        if (csv.length() > 0) {
+            // Final newline causes problems so remove it
+            write(csv.substring(0, csv.length()-1), table.getLocation());
+
+            return true;
+        } else {
+            System.out.println("WARNING: Sheet does not contain data");
+            
+            return false;
+        }
     }
 }
