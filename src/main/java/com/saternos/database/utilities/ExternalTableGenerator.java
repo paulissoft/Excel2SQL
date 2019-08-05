@@ -5,7 +5,11 @@ package com.saternos.database.utilities;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.FileWriter;
+import java.nio.charset.StandardCharsets;
+import java.io.Writer;
+import java.io.OutputStreamWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Date;
@@ -125,7 +129,7 @@ public class ExternalTableGenerator {
 			
             processWorkbook(wb);
 			
-            write(ddlString, "ExternalTables.sql");
+            write(ddlString, "ExternalTables.sql", false);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -169,52 +173,46 @@ public class ExternalTableGenerator {
     private String getStringValue(Cell cell, ExternalTableColumn col) {
         final String value = cell.getStringCellValue();
         
-        // Can not switch from DATE/NUMERIC to STRING
+        col.setStringLength(value.length());
 
-        if (col.getType() == null) {
-            col.setType("STRING");
-        }
+        // System.out.println("DEBUG: getStringValue for column '" + col.getName() + "' and value '" + value + "'" );
         
-        if (col.getType().equals("STRING")) {
-            col.setLength(Math.max(col.getLength(), value.length()));
-        }
-
         return value;
     }
 
     private String getNumericValue(Cell cell, ExternalTableColumn col) {
         String value = null;
 
-        // Can switch STRING to DATE/NUMERIC
-
         // Test if a date! See https://poi.apache.org/help/faq.html
-        if (DateUtil.isCellDateFormatted(cell)) {
+        final Boolean isDate = DateUtil.isCellDateFormatted(cell);
+        
+        if (isDate) {
             Date date = DateUtil.getJavaDate(cell.getNumericCellValue());
             DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
 
             value = dateFormat.format(date);
-            col.setType("DATE");
+            
+            col.setDateLength(value.length());
         } else {
             value = "" + cell.getNumericCellValue();
+            
+            // store the length first since it may be important in setType()
+            col.setNumericLength(value.length());
             col.setNumericPrecision(cell.getNumericCellValue());
-            col.setType("NUMERIC");
         }
-        
+
+        // System.out.println("DEBUG: getNumericValue for column '" + col.getName() + "' and value '" + value + "'" );
+
         return value;
     }
 
     private String getBooleanValue(Cell cell, ExternalTableColumn col) {
         final String value = "" + cell.getBooleanCellValue();
         
-        // Treat it as a STRING. Can not switch from DATE/NUMERIC to STRING
-
-        if (col.getType() == null) {
-            col.setType("STRING");
-        }
+        // Treat it as a STRING.
+        col.setStringLength(value.length());
         
-        if (col.getType().equals("STRING")) {
-            col.setLength(Math.max(col.getLength(), value.length()));
-        }
+        // System.out.println("DEBUG: getBooleanValue for column '" + col.getName() + "' and value '" + value + "'" );
 
         return value;
     }
@@ -225,12 +223,20 @@ public class ExternalTableGenerator {
      * Write the given String content to the file system
      * using the String filename specified
      */
-    private void write(String content, String filename) {
+    private void write(String content, String filename, Boolean utf8) {
 
         try {
             File f = new File(filename);
             f.createNewFile();
-            FileWriter fr = new FileWriter(filename);
+
+            Writer fr;
+
+            if ( !utf8 ) {
+                fr = new FileWriter(filename);
+            } else {
+                fr = new OutputStreamWriter(new FileOutputStream(filename), StandardCharsets.UTF_8);
+            }
+            
             fr.write(content);
             fr.flush();
             fr.close();
@@ -260,10 +266,24 @@ public class ExternalTableGenerator {
         //skip putting the column names and type length row in the csv
         for (int r = COLUMN_NAME_ROW; rowIterator.hasNext(); r++) {
 
+            switch (r % 10)
+                {
+                case 0:
+                    System.out.print("INFO: Processing row " + (r+1));
+                    break;
+                    
+                case 9:
+                    System.out.println(".");
+                    break;
+                    
+                default:
+                    System.out.print(".");
+                }
+
             Row row = rowIterator.next();
             Iterator<Cell> cellIterator = row.cellIterator();
             
-            for (short c = 0; cellIterator.hasNext(); c++) {
+            for (short c = 0; cellIterator.hasNext() && (r == COLUMN_NAME_ROW || c < cols.size()); c++) {
                 try {
                 
                     Cell cell = cellIterator.next();
@@ -332,13 +352,14 @@ public class ExternalTableGenerator {
             }
             csv += newline;
         }
+        System.out.println("");
 		
         // Set the table definition information
         table.setColumns(cols);
 
         if (csv.length() > 0) {
             // Final newline causes problems so remove it
-            write(csv.substring(0, csv.length()-1), table.getLocation());
+            write(csv.substring(0, csv.length()-1), table.getLocation(), false);
 
             return true;
         } else {

@@ -23,6 +23,11 @@ public class ExternalTable {
     private String badFileName = null;
 	
     /**
+     * Discard File Name for the External Table
+     */
+    private String discardFileName = null;
+	
+    /**
      * List of the External Table columns
      */
     private List<ExternalTableColumn> columns = null;
@@ -30,17 +35,22 @@ public class ExternalTable {
     /**
      * Comma Separated Values File Extention
      */
-    private final String CSV_EXTENTION= ".csv";
+    private final String CSV_EXTENTION = ".csv";
 	
     /**
      * External table bad file extention
      */
-    private final String BAD_EXTENTION= ".bad";
+    private final String BAD_EXTENTION = ".bad";
+	
+    /**
+     * External table discard file extention
+     */
+    private final String DISCARD_EXTENTION = ".dsc";
 	
     /**
      * External table log file extention
      */
-    private final String LOG_EXTENTION= ".log";
+    private final String LOG_EXTENTION = ".log";
     /**
      * Directory Location referenced by the External Table
      */
@@ -64,8 +74,9 @@ public class ExternalTable {
     public ExternalTable(String name){
         this.name=name.replaceAll(" ","_");
         columns = new ArrayList<ExternalTableColumn>();
-        badFileName=this.name + BAD_EXTENTION;
-        logFileName=this.name + LOG_EXTENTION;
+        badFileName = this.name + BAD_EXTENTION;
+        discardFileName = this.name + DISCARD_EXTENTION;
+        logFileName = this.name + LOG_EXTENTION;
     }
 	
     /**
@@ -83,6 +94,14 @@ public class ExternalTable {
      */
     public String getBadFileName() {
         return badFileName;
+    }
+
+    /**
+     * 
+     * @return
+     */
+    public String getDiscardFileName() {
+        return discardFileName;
     }
 
     /**
@@ -119,9 +138,9 @@ public class ExternalTable {
             + "  ("+ newline
             + "    RECORDS DELIMITED BY NEWLINE"+ newline
             + "    FIELD NAMES ALL FILES IGNORE"+ newline
-            + "    BADFILE load_dir:'" + getBadFileName() +"'"+ newline
-            // + "    LOGFILE load_dir:'" + getLogFileName() +"'"+ newline
-            + "    NOLOGFILE"+ newline
+            + "    BADFILE load_dir:'" + getBadFileName() + "'" + newline
+            + "    DISCARDFILE load_dir:'" + getDiscardFileName() + "'" + newline
+            + "    LOGFILE load_dir:'" + getLogFileName() + "'" + newline
             // + "    FIELDS TERMINATED BY ','"+newline
             + "    FIELDS DATE_FORMAT DATE MASK \"yyyy-mm-dd\" CSV WITHOUT EMBEDDED RECORD TERMINATORS"+ newline
             + "    MISSING FIELD VALUES ARE NULL"+ newline
@@ -143,7 +162,7 @@ public class ExternalTable {
         ddl +=
               "    )"+ newline
             + "    LOCATION ('"+ getLocation()+"')"+ newline
-            +") REJECT LIMIT UNLIMITED;"+newline+newline+newline;
+            +") REJECT LIMIT 0;"+newline+newline+newline;
 		
         return ddl;
 	
@@ -189,6 +208,14 @@ public class ExternalTable {
      */
     public void setBadFileName(String badFileName) {
         this.badFileName = badFileName;
+    }
+	
+    /**
+     * 
+     * @param discardFileName
+     */
+    public void setDiscardFileName(String discardFileName) {
+        this.discardFileName = discardFileName;
     }
 	
     /**

@@ -16,9 +16,9 @@ public class ExternalTableColumn {
     static String double_quote = "\"";
     
     /**
-     * The column length (VARCHAR2)
+     * The maximum column length for strings in characters (not bytes)
      */
-    private long length = 0;
+    private long stringLength = 0; // at least
     /**
      * The column name
      */
@@ -27,17 +27,23 @@ public class ExternalTableColumn {
     /**
      * Column precision for numeric types
      */
-    private double numericPrecision =0;
+    private double numericPrecision = 0;
+    
+    /**
+     * The maximum column length for numbers in characters
+     */
+    private long numericLength = 0;
 	
     /**
-     * Space for aligning the outputed SQL
+     * The maximum column length for dates in characters
      */
-    private final String SPACE="  ";
+    private long dateLength = 0;
 	
     /**
-     * The column type - using "NUMERIC", "STRING" or "DATE"
+     * Spaces for aligning the outputted SQL
      */
-    private String type = null;
+    private final String SPACES = "  ";
+	
     /**
      * @return
      * 
@@ -46,7 +52,7 @@ public class ExternalTableColumn {
      */
     public String getColumnDdl() {
 
-        return SPACE + getName()+SPACE +getSqlType()+","+newline;
+        return SPACES + getName() + SPACES + getSqlType() + "," + newline;
     }
     /**
      * @return
@@ -55,14 +61,14 @@ public class ExternalTableColumn {
      */
     public String getColumnLoaderLine() {
 		
-        return SPACE + getName() + ","+newline;
+        return SPACES + getName() + "," + newline;
     }
 	
     /**
      * @return
      */
-    public long getLength() {
-        return length;
+    public long getStringLength() {
+        return stringLength;
     }
 
     /**
@@ -78,41 +84,46 @@ public class ExternalTableColumn {
     public double getNumericPrecision() {
         return numericPrecision;
     }
+    
+    /**
+     * @return long
+     */
+    public long getNumericLength() {
+        return numericLength;
+    }
+    
+    /**
+     * @return long
+     */
+    public long getDateLength() {
+        return dateLength;
+    }
+    
     /**
      * @return
      */
     private String getSqlType() {
 
-        switch (getType()) {
-
-        case "NUMERIC":
-            //handle numeric precision here???
+        if (stringLength == 0 && numericLength == 0 && dateLength == 0) {
+            return "VARCHAR2(1 CHAR)";
+        } else if (stringLength > 0 ||
+                   (numericLength > 0 && dateLength > 0)) {
+            // column includes a non empty string value or both numeric and date values: convert it to VARCHAR2
+            return "VARCHAR2(" + Math.max(Math.max(stringLength, numericLength), dateLength) + " CHAR)";
+        } else if (numericLength > 0) {
+            // handle numeric precision here???
             return "NUMBER";
-
-
-        case "STRING":
-            return "VARCHAR2("+getLength()+")";
-
-        case "DATE":
+        } else {
             return "DATE";
         }
-		
-		
-        return null;
     }
 
     /**
-     * @return
+     * @param stringLength
      */
-    public String getType() {
-        return type;
-    }
-	
-    /**
-     * @param length
-     */
-    public void setLength(long length) {
-        this.length = length;
+    public void setStringLength(long stringLength) {
+        if (this.stringLength < stringLength)
+            this.stringLength = stringLength;
     }
 	
     /**
@@ -130,9 +141,19 @@ public class ExternalTableColumn {
     }
 	
     /**
-     * @param type
+     * @param numericLength
      */
-    public void setType(String type) {
-        this.type = type;
+    public void setNumericLength(long numericLength) {
+        if (this.numericLength < numericLength)
+            this.numericLength = numericLength;
     }
+
+    /**
+     * @param dateLength
+     */
+    public void setDateLength(long dateLength) {
+        if (this.dateLength < dateLength)
+            this.dateLength = dateLength;
+    }
+	
 }
