@@ -2,8 +2,8 @@
 target/
 dependency-reduced-pom.xml
 *.csv
-ExternalTables.sql
+ExternalTables*.sql
 *.log
-CZ.xls
-CZ.xlsx
+*.xls
+*.xlsx
 t.bat

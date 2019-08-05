@@ -7,6 +7,8 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
+import java.text.Normalizer;
+
 /**
  * @author Administrator
  * @version 1.0
@@ -72,7 +74,7 @@ public class ExternalTable {
      */
 
     public ExternalTable(String name){
-        this.name=name.replaceAll(" ","_");
+        setName(name);
         columns = new ArrayList<ExternalTableColumn>();
         badFileName = this.name + BAD_EXTENTION;
         discardFileName = this.name + DISCARD_EXTENTION;
@@ -137,31 +139,16 @@ public class ExternalTable {
             + "  ACCESS PARAMETERS "+ newline
             + "  ("+ newline
             + "    RECORDS DELIMITED BY NEWLINE"+ newline
+            + "    CHARACTERSET WE8MSWIN1252"+ newline
+            + "    STRING SIZES ARE IN CHARACTERS"+ newline
             + "    FIELD NAMES ALL FILES IGNORE"+ newline
             + "    BADFILE load_dir:'" + getBadFileName() + "'" + newline
             + "    DISCARDFILE load_dir:'" + getDiscardFileName() + "'" + newline
             + "    LOGFILE load_dir:'" + getLogFileName() + "'" + newline
-            // + "    FIELDS TERMINATED BY ','"+newline
             + "    FIELDS DATE_FORMAT DATE MASK \"yyyy-mm-dd\" CSV WITHOUT EMBEDDED RECORD TERMINATORS"+ newline
             + "    MISSING FIELD VALUES ARE NULL"+ newline
-            /*
-              + "    ( "+ newline
-            */
-            ;
-        /* not needed due to FIELD NAMES ALL FILES */
-        /*
-          iter = columns.iterator();
-          while (iter.hasNext()){
-          ExternalTableColumn c = (ExternalTableColumn)iter.next();
-          ddl +="                 "+c.getColumnLoaderLine();
-          }
-          ddl = ddl.substring(0, ddl.lastIndexOf(","))
-          + newline
-          + "    )";
-        */
-        ddl +=
-              "    )"+ newline
-            + "    LOCATION ('"+ getLocation()+"')"+ newline
+            + "  )"+ newline
+            + "  LOCATION ('"+ getLocation()+"')"+ newline
             +") REJECT LIMIT 0;"+newline+newline+newline;
 		
         return ddl;
@@ -248,6 +235,6 @@ public class ExternalTable {
      * @param name
      */
     public void setName(String name) {
-        this.name = name;
+        this.name = Normalizer.normalize(name, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
     }
 }
