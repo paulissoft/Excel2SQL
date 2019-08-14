@@ -235,6 +235,6 @@ public class ExternalTable {
      * @param name
      */
     public void setName(String name) {
-        this.name = Normalizer.normalize(name, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
+        this.name = Normalizer.normalize(name, Normalizer.Form.NFD).replaceAll("\\p{M}", "").trim();
     }
 }

@@ -2,6 +2,8 @@
 target/
 dependency-reduced-pom.xml
 *.csv
+*.bak
+*.dmp
 ExternalTables*.sql
 *.log
 *.xls
