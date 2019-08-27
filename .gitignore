@@ -9,3 +9,5 @@ dependency-reduced-pom.xml
 *.xls
 *.xlsx
 t.bat
+t.sh
+*.bad

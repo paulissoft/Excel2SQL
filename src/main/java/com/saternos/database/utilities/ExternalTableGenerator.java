@@ -42,31 +42,31 @@ import org.apache.poi.poifs.filesystem.POIFSFileSystem;
 public class ExternalTableGenerator {
 
     static String newline = "\r\n";
-	
+  
     private final String separator = ",";
 
     private final String enclosure = "\"";
     
     public static void main(String args[]) {
-		
+    
         if (args.length != 1) {
             System.out.println(newline + "Usage: ExternalTableGenerator <excel_file_name>" + newline);
             System.exit(0);
         }
         System.out.println("INFO: Begin processing.");
-		
+    
         ExternalTableGenerator generator = new ExternalTableGenerator(args[0]);
 
         System.out.println("INFO: Using working directory " + new File(generator.pwd).getAbsolutePath());
-		
+    
         generator.execute();
-		
+    
         System.out.println("INFO: Processing complete.");
 
     }
-	
+  
     // All sheets in the workbook use the following constants.
-	
+  
     /**
      * The index of the row where the values that are used
      * for the names of the table columns are retrieved
@@ -97,17 +97,17 @@ public class ExternalTableGenerator {
     private String spreadsheet;
 
     private String ddlString ="";
-	
+  
     /**
      * @param string
      */
     public ExternalTableGenerator(String spreadsheet) {
 
         pwd = new File("").getAbsolutePath();
-		
+    
         // this.spreadsheet = pwd+File.separator+spreadsheet;
         this.spreadsheet = (new File(spreadsheet)).getAbsolutePath();
-		
+    
     }
 
     /**
@@ -117,7 +117,7 @@ public class ExternalTableGenerator {
 
         try {
             ddlString ="CREATE /*OR REPLACE*/ DIRECTORY load_dir AS '"+pwd+"'"+newline+";"+newline+newline; 
-			
+      
             Workbook wb;
             
             try {
@@ -126,9 +126,9 @@ public class ExternalTableGenerator {
             } catch (OfficeXmlFileException e) {
                 wb = new XSSFWorkbook(new FileInputStream(spreadsheet));
             }
-			
+      
             processWorkbook(wb);
-			
+      
             write(ddlString, "ExternalTables.sql", false);
         } catch (Exception e) {
             e.printStackTrace();
@@ -164,10 +164,10 @@ public class ExternalTableGenerator {
                 ExternalTable table = new ExternalTable(wb.getSheetName(i));
                 
                 processSheet(sheet, table);
-			
+      
                 System.out.println("INFO: Table "+ table.getName() + " processed." );
             }
-		
+    
     }
 
     private String getStringValue(Cell cell, ExternalTableColumn col) {
@@ -232,7 +232,8 @@ public class ExternalTableGenerator {
             Writer fr;
 
             if ( !utf8 ) {
-                fr = new FileWriter(filename);
+                // fr = new FileWriter(filename);
+                fr = new OutputStreamWriter(new FileOutputStream(filename), "windows-1252");
             } else {
                 fr = new OutputStreamWriter(new FileOutputStream(filename), StandardCharsets.UTF_8);
             }
@@ -240,9 +241,9 @@ public class ExternalTableGenerator {
             fr.write(content);
             fr.flush();
             fr.close();
-			
+      
             System.out.println("INFO: File " + filename + " created.");
-			
+      
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -353,7 +354,7 @@ public class ExternalTableGenerator {
             csv += newline;
         }
         System.out.println("");
-		
+    
         // Set the table definition information
         table.setColumns(cols);
 
