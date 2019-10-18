@@ -18,6 +18,7 @@
     <poi.version>4.1.0</poi.version>
     <maven-shade-plugin.version>3.2.0</maven-shade-plugin.version>
     <maven-compiler-plugin.version>3.1</maven-compiler-plugin.version>
+    <jcommander.version>1.78</jcommander.version>
   </properties>
   
   <dependencies>
@@ -37,6 +38,11 @@
       <groupId>org.apache.poi</groupId>
       <artifactId>poi-ooxml</artifactId>
       <version>${poi.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.beust</groupId>
+      <artifactId>jcommander</artifactId>
+      <version>${jcommander.version}</version>
     </dependency>
   </dependencies>
 

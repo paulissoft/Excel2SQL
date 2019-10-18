@@ -31,38 +31,64 @@ import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.poifs.filesystem.OfficeXmlFileException;
 import org.apache.poi.poifs.filesystem.POIFSFileSystem;
 
+import com.beust.jcommander.Parameter;
+import com.beust.jcommander.JCommander;
+
 /**
  * @author Casimir Saternos
  * @version 1.0
  * 
- *         This program is run at the command line. Given a excel
- *         spreadsheet, a script is generated to create the external table(s)
- *         that references the data from the spreadsheet.
+ *         This program is run at the command line. Given one or more excel
+ *         spreadsheets, a script is generated to create the external table(s)
+ *         that references the data from the spreadsheets. 
+ *
+ *         When multiple spreadsheets are supplied, 
+ *         they must all have the same number and names of sheets.
  */
 public class ExternalTableGenerator {
 
+    @Parameter(names = "-verbose", description = "Level of verbosity")
+    private Integer verbose = 1;
+
+    /**
+     * The Excel Spreadsheets (xls) that are being accessed
+     */
+    @Parameter(description = "Spreadsheets")
+    private List<String> spreadsheets = new ArrayList<String>();
+
+    private void info(String str) {
+        if (verbose >= 1) {
+            System.out.println("INFO: " + str);
+        }
+    }
+
+    private void debug(String str) {
+        if (verbose >= 2) {
+            System.out.println("DEBUG: " + str);
+        }
+    }
+    
     static String newline = "\r\n";
   
     private final String separator = ",";
 
     private final String enclosure = "\"";
     
-    public static void main(String args[]) {
+    public static void main(String ... args) {
     
-        if (args.length != 1) {
-            System.out.println(newline + "Usage: ExternalTableGenerator <excel_file_name>" + newline);
+        if (args.length == 0) {
+            System.out.println(newline + "Usage: ExternalTableGenerator <excel_file_name 1> .. <excel_file_name N>" + newline);
             System.exit(0);
         }
-        System.out.println("INFO: Begin processing.");
-    
-        ExternalTableGenerator generator = new ExternalTableGenerator(args[0]);
+        
+        ExternalTableGenerator generator = new ExternalTableGenerator();
 
-        System.out.println("INFO: Using working directory " + new File(generator.pwd).getAbsolutePath());
-    
+        JCommander.newBuilder()
+            .addObject(generator)
+            .build()
+            .parse(args);
+
         generator.execute();
-    
-        System.out.println("INFO: Processing complete.");
-
     }
   
     // All sheets in the workbook use the following constants.
@@ -84,65 +110,71 @@ public class ExternalTableGenerator {
     /**
      * List of external table definitions
      */
-    private List<ExternalTableColumn> externalTables;
+    // private List<ExternalTableColumn> externalTables;
+    private List<ExternalTable> externalTables;
+    private List<List<ExternalTableColumn>> externalTableColumns;
+
 
     /**
      * Present working directory
      */
     private String pwd;
 
-    /**
-     * The Excel Spreadsheet (xls) that is being accessed
-     */
-    private String spreadsheet;
-
-    private String ddlString ="";
+    private String ddlString = "";
   
-    /**
-     * @param string
-     */
-    public ExternalTableGenerator(String spreadsheet) {
-
-        pwd = new File("").getAbsolutePath();
-    
-        // this.spreadsheet = pwd+File.separator+spreadsheet;
-        this.spreadsheet = (new File(spreadsheet)).getAbsolutePath();
-    
+    public ExternalTableGenerator() {
+        this.pwd = new File("").getAbsolutePath();    
+        this.externalTables = new ArrayList<ExternalTable>();
+        this.externalTableColumns = new ArrayList<List<ExternalTableColumn>>();
     }
 
     /**
      *  Open the specified xls and process it
      */
     private void execute() {
+        info("Begin processing.");
 
-        try {
-            ddlString ="CREATE /*OR REPLACE*/ DIRECTORY load_dir AS '"+pwd+"'"+newline+";"+newline+newline; 
-      
-            Workbook wb;
-            
+        info("Using working directory " + new File(pwd).getAbsolutePath());
+
+        ddlString = "CREATE /*OR REPLACE*/ DIRECTORY load_dir AS '"+pwd+"'"+newline+";"+newline+newline; 
+
+        for (int i = 0; i < spreadsheets.size(); i++) {
+            final String spreadsheet = (new File(spreadsheets.get(i))).getAbsolutePath();
+
             try {
-                POIFSFileSystem fs = new POIFSFileSystem(new FileInputStream(spreadsheet));
-                wb = new HSSFWorkbook(fs);
-            } catch (OfficeXmlFileException e) {
-                wb = new XSSFWorkbook(new FileInputStream(spreadsheet));
+      
+                Workbook wb;
+            
+                try {
+                    POIFSFileSystem fs = new POIFSFileSystem(new FileInputStream(spreadsheet));
+                    wb = new HSSFWorkbook(fs);
+                } catch (OfficeXmlFileException e) {
+                    wb = new XSSFWorkbook(new FileInputStream(spreadsheet));
+                }
+
+                info("Processing workbook " + spreadsheet);
+
+                processWorkbook(wb, i == 0, i == spreadsheets.size() - 1);                
+            } catch (Exception e) {
+                e.printStackTrace();
             }
-      
-            processWorkbook(wb);
-      
-            write(ddlString, "ExternalTables.sql", false);
-        } catch (Exception e) {
-            e.printStackTrace();
         }
+
+        write(ddlString, "ExternalTables.sql", false, false);
+            
+        info("Processing complete.");
     }
 
     /**
      * @param sheet
      * @param table
      */
-    private void processSheet(Sheet sheet, ExternalTable table) {
+    private void processSheet(Sheet sheet, ExternalTable table, List<ExternalTableColumn> cols, boolean first, boolean last) {
         //Write out a .csv file based upon the sheet
-        if (writeCsv(sheet, table)) {
-            //Add the ddl for the table to the script
+        if (writeCsv(sheet, table, cols, first, last) && last) {
+            // Set the table definition information
+            table.setColumns(cols);
+            // Add the ddl for the table to the script
             ddlString += table.getDdl();
         }
     }
@@ -152,20 +184,37 @@ public class ExternalTableGenerator {
      * Iterate through each sheet in the workbook
      * and process it
      */
-    private void processWorkbook(Workbook wb) {
-        
+    private void processWorkbook(Workbook wb, boolean first, boolean last) {
+
+        if (!first) {
+            assert(externalTables.size() == wb.getNumberOfSheets());
+            assert(externalTableColumns.size() == wb.getNumberOfSheets());
+        }
+
         for (int i = 0; i < wb.getNumberOfSheets(); i++) 
             {
                 Sheet sheet = wb.getSheetAt(i);
 
-                System.out.println("INFO: Processing sheet " + i);
+                info("Processing sheet " + i + ": " + wb.getSheetName(i));
+                
+                ExternalTable table;
+                List<ExternalTableColumn> cols;
 
-                
-                ExternalTable table = new ExternalTable(wb.getSheetName(i));
-                
-                processSheet(sheet, table);
-      
-                System.out.println("INFO: Table "+ table.getName() + " processed." );
+                if (first) {
+                    table = new ExternalTable(wb.getSheetName(i));
+                    externalTables.add(i, table);
+                    cols = new ArrayList<ExternalTableColumn>();
+                    externalTableColumns.add(i, cols);
+                } else {
+                    table = externalTables.get(i);
+                    cols = externalTableColumns.get(i);
+                }
+
+                processSheet(sheet, table, cols, first, last);
+
+                if (last) {      
+                    info("Table "+ table.getName() + " processed." );
+                }
             }
     
     }
@@ -175,7 +224,7 @@ public class ExternalTableGenerator {
         
         col.setStringLength(value.length());
 
-        // System.out.println("DEBUG: getStringValue for column '" + col.getName() + "' and value '" + value + "'" );
+        debug("getStringValue for column '" + col.getName() + "' and value '" + value + "'" );
         
         return value;
     }
@@ -201,7 +250,7 @@ public class ExternalTableGenerator {
             col.setNumericPrecision(cell.getNumericCellValue());
         }
 
-        // System.out.println("DEBUG: getNumericValue for column '" + col.getName() + "' and value '" + value + "'" );
+        debug("getNumericValue for column '" + col.getName() + "' and value '" + value + "'" );
 
         return value;
     }
@@ -211,8 +260,8 @@ public class ExternalTableGenerator {
         
         // Treat it as a STRING.
         col.setStringLength(value.length());
-        
-        // System.out.println("DEBUG: getBooleanValue for column '" + col.getName() + "' and value '" + value + "'" );
+
+        debug("getBooleanValue for column '" + col.getName() + "' and value '" + value + "'" );
 
         return value;
     }
@@ -223,27 +272,26 @@ public class ExternalTableGenerator {
      * Write the given String content to the file system
      * using the String filename specified
      */
-    private void write(String content, String filename, Boolean utf8) {
+    private void write(String content, String filename, Boolean utf8, boolean append) {
 
         try {
-            File f = new File(filename);
-            f.createNewFile();
+            // GJP 2019-10-18  Seems not necessary.
+            // File f = new File(filename);
+            // f.createNewFile();
 
             Writer fr;
 
             if ( !utf8 ) {
-                // fr = new FileWriter(filename);
-                fr = new OutputStreamWriter(new FileOutputStream(filename), "windows-1252");
+                fr = new OutputStreamWriter(new FileOutputStream(filename, append), "windows-1252");
             } else {
-                fr = new OutputStreamWriter(new FileOutputStream(filename), StandardCharsets.UTF_8);
+                fr = new OutputStreamWriter(new FileOutputStream(filename, append), StandardCharsets.UTF_8);
             }
             
             fr.write(content);
             fr.flush();
             fr.close();
-      
-            System.out.println("INFO: File " + filename + " created.");
-      
+            
+            info("Finished " + (append ? "appending to" : "creating") + " " + filename);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -252,33 +300,35 @@ public class ExternalTableGenerator {
     /**
      * @param sheet
      * @param table
+     * @param first  First workbook
+     * @param last   Last workbook
      */
-    private Boolean writeCsv(Sheet sheet, ExternalTable table) {
+    private Boolean writeCsv(Sheet sheet, ExternalTable table, List<ExternalTableColumn> cols, boolean first, boolean last) {
 
         Row names = sheet.getRow(COLUMN_NAME_ROW);
         Row types = sheet.getRow(COLUMN_TYPE_ROW);
 
-        ArrayList<ExternalTableColumn> cols = new ArrayList<ExternalTableColumn>();
-
         String csv = "";
+        String progress = null;
 
         Iterator<Row> rowIterator = sheet.rowIterator();
             
-        //skip putting the column names and type length row in the csv
         for (int r = COLUMN_NAME_ROW; rowIterator.hasNext(); r++) {
 
             switch (r % 10)
                 {
                 case 0:
-                    System.out.print("INFO: Processing row " + (r+1));
+                    progress = "Processing row " + (r+1);
                     break;
                     
                 case 9:
-                    System.out.println(".");
+                    progress += ".";
+                    info(progress);
+                    progress = null;
                     break;
                     
                 default:
-                    System.out.print(".");
+                    progress += ".";
                 }
 
             Row row = rowIterator.next();
@@ -288,19 +338,34 @@ public class ExternalTableGenerator {
                 try {
                 
                     Cell cell = cellIterator.next();
+                    
+                    if (cell == null) continue;
 
-                    ExternalTableColumn col = (r == COLUMN_NAME_ROW ? new ExternalTableColumn() : cols.get(c));
+                    ExternalTableColumn col = (r == COLUMN_NAME_ROW && first ? new ExternalTableColumn() : cols.get(c));
                     
                     String value = null;
-
-                    if (cell == null) continue;
 
                     switch(r)
                         {
                         case COLUMN_NAME_ROW:
-                            value = cell.getStringCellValue();
-                            col.setName(value);
-                            cols.add(col);
+                            // Some names are just numbers, strangely enough (column name 14)
+                            try {
+                                value = cell.getStringCellValue();
+                                // string?
+                            } catch (IllegalStateException e1) {
+                                // java.lang.IllegalStateException: Cannot get a STRING value from a NUMERIC cell
+                                value = "" + cell.getNumericCellValue();
+                            }
+                            
+                            info("Scanning heading " + (c+1) + ": " + value);
+
+                            if (first) {
+                                col.setName(value);
+                                cols.add(col);
+                            } else {
+                                info("Scanning column " + (c+1) + ": " + col.getName());
+                                assert(col.getName().equals(ExternalTable.getName(value))); // check column name
+                            }
                             break;
                     
                         default:
@@ -308,17 +373,18 @@ public class ExternalTableGenerator {
                             switch(cell.getCellType())
                                 {
                                 case FORMULA:
+                                    // try to be the most specific: booleans, numbers and then strings
                                     try {
-                                        value = getStringValue(cell, col);
+                                        value = getBooleanValue(cell, col);
                                         // string?
                                     } catch (IllegalStateException e1) {
-                                        // java.lang.IllegalStateException: Cannot get a STRING value from a NUMERIC cell
+                                        // java.lang.IllegalStateException: Cannot get a BOOLEAN value from a NUMERIC formula cell
 
                                         try {
                                             value = getNumericValue(cell, col);
                                         } catch (IllegalStateException e2) {
-                                            // java.lang.IllegalStateException: Cannot get a NUMERIC value from a BOOLEAN formula cell
-                                            value = getBooleanValue(cell, col);
+                                            // java.lang.IllegalStateException: Cannot get a NUMERIC value from a STRING cell
+                                            value = getStringValue(cell, col);                                            
                                         }
                                     }
                                     break;
@@ -340,6 +406,10 @@ public class ExternalTableGenerator {
                                     throw new RuntimeException("Cell Type of cell " + col.getName() + " unknown: " + cell.getCellType()); 
                                 }
                         }
+
+                    // The Column Name row is only prin,ted the first time else it is used for verification
+                    if (r == COLUMN_NAME_ROW && !first) continue;                        
+
                     // see https://en.wikipedia.org/wiki/Comma-separated_values
                     value.replace(enclosure, enclosure + enclosure);
                     if (value.contains(enclosure) || value.contains(separator)) {
@@ -353,14 +423,15 @@ public class ExternalTableGenerator {
             }
             csv += newline;
         }
+        if (progress != null) {
+            info(progress);
+        }
+                    
         System.out.println("");
-    
-        // Set the table definition information
-        table.setColumns(cols);
 
         if (csv.length() > 0) {
             // Final newline causes problems so remove it
-            write(csv.substring(0, csv.length()-1), table.getLocation(), false);
+            write(csv.substring(0, csv.length()-1), table.getLocation(), false, !first);
 
             return true;
         } else {

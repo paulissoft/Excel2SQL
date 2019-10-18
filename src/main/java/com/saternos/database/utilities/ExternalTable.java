@@ -237,4 +237,8 @@ public class ExternalTable {
     public void setName(String name) {
         this.name = Normalizer.normalize(name, Normalizer.Form.NFD).replaceAll("\\p{M}", "").trim();
     }
+
+    public static String getName(String name) {
+        return (name == null ? null : double_quote + Normalizer.normalize(name, Normalizer.Form.NFD).replaceAll("\\p{M}", "").trim() + double_quote);
+    }
 }
