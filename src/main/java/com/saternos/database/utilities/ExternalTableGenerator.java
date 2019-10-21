@@ -50,11 +50,14 @@ public class ExternalTableGenerator {
     @Parameter(names = "-verbose", description = "Level of verbosity")
     private Integer verbose = 1;
 
-    @Parameter(names = "-sheet", description = "Sheet name regular expression")
+    @Parameter(names = "-sheet", description = "Sheet name regular expression to match")
     private String sheetName = ".*";
 
+    @Parameter(names = "-table", description = "The table name(s) to use instead of the sheet name(s)")
+    private List<String> tableNames = new ArrayList<>();
+
     /**
-     * The Excel Spreadsheets (xls) that are being accessed
+     * The Excel Spreadsheets (.xls or .xlsx) that are being accessed
      */
     @Parameter(description = "Spreadsheets")
     private List<String> spreadsheets = new ArrayList<String>();
@@ -126,7 +129,7 @@ public class ExternalTableGenerator {
     }
 
     /**
-     *  Open the specified xls and process it
+     *  Open the specified .xls or .xlsx and process it
      */
     private void execute() {
         info("Begin processing.");
@@ -196,22 +199,23 @@ public class ExternalTableGenerator {
             }
                 
             ExternalTable table = null;
+            final String tableName = ( i < tableNames.size() ? tableNames.get(i) : wb.getSheetName(i) );
 
             if (first) {
-                table = new ExternalTable(wb.getSheetName(i));
+                table = new ExternalTable(tableName);
                 externalTables.add(table);
             } else {
-                final String tableName = ExternalTable.getName(wb.getSheetName(i));
+                final String sqlTableName = ExternalTable.getName(tableName);
 
                 for (int index = 0; index < externalTables.size(); index++) {
-                    if (externalTables.get(index).getName().equals(tableName)) {
+                    if (externalTables.get(index).getName().equals(sqlTableName)) {
                         table = externalTables.get(index);
                         break;
                     }
                 }
                 
                 if (table == null) {
-                    throw new RuntimeException("Could not find table name (" + tableName + ")");
+                    throw new RuntimeException("Could not find table name (" + sqlTableName + ")");
                 }
             }
 
@@ -414,18 +418,14 @@ public class ExternalTableGenerator {
                             switch(cell.getCellType())
                                 {
                                 case FORMULA:
-                                    // try to be the most specific: booleans, numbers and then strings
+                                    // try in this order: numbers, strings (a boolean is a string in the database) and booleans
                                     try {
-                                        value = getBooleanValue(cell, col);
-                                        // string?
+                                        value = getNumericValue(cell, col);
                                     } catch (IllegalStateException e1) {
-                                        // java.lang.IllegalStateException: Cannot get a BOOLEAN value from a NUMERIC formula cell
-
                                         try {
-                                            value = getNumericValue(cell, col);
+                                            value = getStringValue(cell, col);
                                         } catch (IllegalStateException e2) {
-                                            // java.lang.IllegalStateException: Cannot get a NUMERIC value from a STRING cell
-                                            value = getStringValue(cell, col);                                            
+                                            value = getBooleanValue(cell, col);
                                         }
                                     }
                                     break;
