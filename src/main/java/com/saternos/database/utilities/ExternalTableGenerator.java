@@ -50,6 +50,9 @@ public class ExternalTableGenerator {
     @Parameter(names = "-verbose", description = "Level of verbosity")
     private Integer verbose = 1;
 
+    @Parameter(names = "-sheet", description = "Sheet name regular expression")
+    private String sheetName = ".*";
+
     /**
      * The Excel Spreadsheets (xls) that are being accessed
      */
@@ -70,10 +73,6 @@ public class ExternalTableGenerator {
     
     static String newline = "\r\n";
   
-    private final String separator = ",";
-
-    private final String enclosure = "\"";
-    
     public static void main(String ... args) {
     
         if (args.length == 0) {
@@ -112,7 +111,6 @@ public class ExternalTableGenerator {
      */
     // private List<ExternalTableColumn> externalTables;
     private List<ExternalTable> externalTables;
-    private List<List<ExternalTableColumn>> externalTableColumns;
 
 
     /**
@@ -125,7 +123,6 @@ public class ExternalTableGenerator {
     public ExternalTableGenerator() {
         this.pwd = new File("").getAbsolutePath();    
         this.externalTables = new ArrayList<ExternalTable>();
-        this.externalTableColumns = new ArrayList<List<ExternalTableColumn>>();
     }
 
     /**
@@ -169,11 +166,9 @@ public class ExternalTableGenerator {
      * @param sheet
      * @param table
      */
-    private void processSheet(Sheet sheet, ExternalTable table, List<ExternalTableColumn> cols, boolean first, boolean last) {
+    private void processSheet(Sheet sheet, ExternalTable table, boolean first, boolean last) {
         //Write out a .csv file based upon the sheet
-        if (writeCsv(sheet, table, cols, first, last) && last) {
-            // Set the table definition information
-            table.setColumns(cols);
+        if (writeCsv(sheet, table, first, last) && last) {
             // Add the ddl for the table to the script
             ddlString += table.getDdl();
         }
@@ -186,37 +181,47 @@ public class ExternalTableGenerator {
      */
     private void processWorkbook(Workbook wb, boolean first, boolean last) {
 
-        if (!first) {
-            assert(externalTables.size() == wb.getNumberOfSheets());
-            assert(externalTableColumns.size() == wb.getNumberOfSheets());
-        }
+        //if (!first && !(externalTables.size() == wb.getNumberOfSheets())) {
+        //    throw new RuntimeException("External tables size (" + externalTables.size() + ") should be equal to the number of sheets (" + wb.getNumberOfSheets() + ")");
+        //}
 
-        for (int i = 0; i < wb.getNumberOfSheets(); i++) 
-            {
-                Sheet sheet = wb.getSheetAt(i);
+        for (int i = 0; i < wb.getNumberOfSheets(); i++) {
+            Sheet sheet = wb.getSheetAt(i);
 
+            if (!wb.getSheetName(i).matches(sheetName)) {
+                info("Skipping sheet " + i + ": " + wb.getSheetName(i) + " since it does not match " + sheetName);
+                continue;
+            } else {
                 info("Processing sheet " + i + ": " + wb.getSheetName(i));
+            }
                 
-                ExternalTable table;
-                List<ExternalTableColumn> cols;
+            ExternalTable table = null;
 
-                if (first) {
-                    table = new ExternalTable(wb.getSheetName(i));
-                    externalTables.add(i, table);
-                    cols = new ArrayList<ExternalTableColumn>();
-                    externalTableColumns.add(i, cols);
-                } else {
-                    table = externalTables.get(i);
-                    cols = externalTableColumns.get(i);
+            if (first) {
+                table = new ExternalTable(wb.getSheetName(i));
+                externalTables.add(table);
+            } else {
+                final String tableName = ExternalTable.getName(wb.getSheetName(i));
+
+                for (int index = 0; index < externalTables.size(); index++) {
+                    if (externalTables.get(index).getName().equals(tableName)) {
+                        table = externalTables.get(index);
+                        break;
+                    }
                 }
-
-                processSheet(sheet, table, cols, first, last);
-
-                if (last) {      
-                    info("Table "+ table.getName() + " processed." );
+                
+                if (table == null) {
+                    throw new RuntimeException("Could not find table name (" + tableName + ")");
                 }
             }
-    
+
+            
+            processSheet(sheet, table, first, last);
+
+            if (last) {      
+                info("Table "+ table.getName() + " processed." );
+            }
+        }        
     }
 
     private String getStringValue(Cell cell, ExternalTableColumn col) {
@@ -224,7 +229,9 @@ public class ExternalTableGenerator {
         
         col.setStringLength(value.length());
 
-        debug("getStringValue for column '" + col.getName() + "' and value '" + value + "'" );
+        if (value != null && value.length() > 0) {
+            debug("getStringValue for column '" + col.getName() + "' and value '" + value + "'" );
+        }
         
         return value;
     }
@@ -303,18 +310,21 @@ public class ExternalTableGenerator {
      * @param first  First workbook
      * @param last   Last workbook
      */
-    private Boolean writeCsv(Sheet sheet, ExternalTable table, List<ExternalTableColumn> cols, boolean first, boolean last) {
+    private Boolean writeCsv(Sheet sheet, ExternalTable table, boolean first, boolean last) {
 
         Row names = sheet.getRow(COLUMN_NAME_ROW);
         Row types = sheet.getRow(COLUMN_TYPE_ROW);
 
         String csv = "";
+        String csvEmptyRow = "";
         String progress = null;
 
         Iterator<Row> rowIterator = sheet.rowIterator();
             
         for (int r = COLUMN_NAME_ROW; rowIterator.hasNext(); r++) {
 
+            debug("Processing row " + (r+1));
+            
             switch (r % 10)
                 {
                 case 0:
@@ -333,17 +343,46 @@ public class ExternalTableGenerator {
 
             Row row = rowIterator.next();
             Iterator<Cell> cellIterator = row.cellIterator();
+            boolean rowEmpty = true;
+            String csvRow = "";
             
-            for (short c = 0; cellIterator.hasNext() && (r == COLUMN_NAME_ROW || c < cols.size()); c++) {
-                try {
-                
-                    Cell cell = cellIterator.next();
+            for (short c = 0; (r == COLUMN_NAME_ROW || c < table.getNrColumns()); c++) {
+                debug("Processing column " + (c+1));
+                            
+                try {                
+                    Cell cell = cellIterator.hasNext() ? cellIterator.next() : null;
                     
-                    if (cell == null) continue;
+                    if (cell == null) {
+                        debug("No cell defined");
 
-                    ExternalTableColumn col = (r == COLUMN_NAME_ROW && first ? new ExternalTableColumn() : cols.get(c));
+                        if (r == COLUMN_NAME_ROW) {
+                            break;
+                        } else {
+                            csvRow += ExternalTable.SEPARATOR;
+                            continue;
+                        }
+                    }
+
+                    assert(cell != null);
                     
+                    debug("cell address: " + cell.getAddress() + "; cell column index: " + cell.getColumnIndex());
+
+                    // Sometimes there may be cells missing so after cell column index 0 may come cell column index 2
+                    // But not for the header
+                    if (r == COLUMN_NAME_ROW && !(c == cell.getColumnIndex())) {
+                        throw new RuntimeException("There should be no columns missing for the header");
+                    }
+                                        
                     String value = null;
+                    String missingColumns = "";
+                    
+                    for ( ; c < cell.getColumnIndex(); c++ ) {
+                        missingColumns += ExternalTable.SEPARATOR;
+                    }
+                    
+                    assert(c == cell.getColumnIndex());
+                    
+                    ExternalTableColumn col = (r == COLUMN_NAME_ROW && first ? new ExternalTableColumn() : table.getColumn(c));                    
 
                     switch(r)
                         {
@@ -357,15 +396,17 @@ public class ExternalTableGenerator {
                                 value = "" + cell.getNumericCellValue();
                             }
                             
-                            info("Scanning heading " + (c+1) + ": " + value);
+                            info((first ? "Scanning" : "Skipping") + " heading " + (c+1) + ": " + value);
 
                             if (first) {
                                 col.setName(value);
-                                cols.add(col);
+                                table.addColumn(col);
                             } else {
-                                info("Scanning column " + (c+1) + ": " + col.getName());
-                                assert(col.getName().equals(ExternalTable.getName(value))); // check column name
+                                if (!col.getName().equals(ExternalTable.getName(value))) {
+                                    throw new RuntimeException("Column name (" + col.getName() + ") should be equal to the external table name (" + ExternalTable.getName(value) + ")"); // check column name
+                                }
                             }
+                            csvEmptyRow += ExternalTable.SEPARATOR;                            
                             break;
                     
                         default:
@@ -411,18 +452,23 @@ public class ExternalTableGenerator {
                     if (r == COLUMN_NAME_ROW && !first) continue;                        
 
                     // see https://en.wikipedia.org/wiki/Comma-separated_values
-                    value.replace(enclosure, enclosure + enclosure);
-                    if (value.contains(enclosure) || value.contains(separator)) {
-                        value = enclosure + value + enclosure;
+                    value.replace(ExternalTable.ENCLOSURE, ExternalTable.ENCLOSURE + ExternalTable.ENCLOSURE);
+                    if (value.contains(ExternalTable.ENCLOSURE) || value.contains(ExternalTable.SEPARATOR)) {
+                        value = ExternalTable.ENCLOSURE + value + ExternalTable.ENCLOSURE;
                     }
-                    csv += value + separator;
+                    csvRow += missingColumns + value + ExternalTable.SEPARATOR;
                 } catch (Exception e) {
                     System.err.println("Error in line " + (r+1) + " for column " + (c+1));
                     throw e;
                 }
             }
-            csv += newline;
+            if (!csvRow.equals(csvEmptyRow)) {
+                csv += csvRow + newline;
+            } else {
+                info("Skipping row " + (r+1) + " since it is empty");
+            }
         }
+        
         if (progress != null) {
             info(progress);
         }

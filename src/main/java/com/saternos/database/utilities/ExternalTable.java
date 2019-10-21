@@ -89,6 +89,23 @@ public class ExternalTable {
     {
         columns.add(column);
     }
+    
+    /**
+     * 
+     * @return column
+     */
+    public ExternalTableColumn getColumn(int i)
+    {
+        return columns.get(i);
+    }
+
+    /**
+     * 
+     * @return columns
+     */
+    public int getNrColumns() {
+        return columns.size();
+    }
 	
     /**
      * 
@@ -145,7 +162,10 @@ public class ExternalTable {
             + "    BADFILE load_dir:'" + getBadFileName() + "'" + newline
             + "    DISCARDFILE load_dir:'" + getDiscardFileName() + "'" + newline
             + "    LOGFILE load_dir:'" + getLogFileName() + "'" + newline
-            + "    FIELDS DATE_FORMAT DATE MASK \"yyyy-mm-dd\" CSV WITHOUT EMBEDDED RECORD TERMINATORS"+ newline
+            // Oracle 12C syntax
+            + "    FIELDS TERMINATED BY '" + SEPARATOR + "' OPTIONALLY ENCLOSED BY '" + ENCLOSURE + "' DATE_FORMAT DATE MASK \"yyyy-mm-dd\""+ newline
+            // Oracle 12CR2 syntax
+            // + "    FIELDS DATE_FORMAT DATE MASK \"yyyy-mm-dd\" CSV WITHOUT EMBEDDED RECORD TERMINATORS"+ newline
             + "    MISSING FIELD VALUES ARE NULL"+ newline
             + "  )"+ newline
             + "  LOCATION ('"+ getLocation()+"')"+ newline
@@ -207,15 +227,6 @@ public class ExternalTable {
 	
     /**
      * 
-     * @param columns
-     */
-    @SuppressWarnings("unchecked")
-    public void setColumns(List columns) {
-        this.columns = columns;
-    }
-	
-    /**
-     * 
      * @param dirLocation
      */
     public void setDirLocation(String dirLocation) {
@@ -241,4 +252,8 @@ public class ExternalTable {
     public static String getName(String name) {
         return (name == null ? null : double_quote + Normalizer.normalize(name, Normalizer.Form.NFD).replaceAll("\\p{M}", "").trim() + double_quote);
     }
+    
+    public static final String SEPARATOR = ",";
+
+    public static final String ENCLOSURE = "\"";    
 }
