@@ -18,7 +18,7 @@ public class ExternalTableColumn {
     /**
      * The maximum column length for strings in characters (not bytes)
      */
-    private long stringLength = 0; // at least
+    private int stringLength = 0; // at least
     /**
      * The column name
      */
@@ -27,17 +27,17 @@ public class ExternalTableColumn {
     /**
      * Column precision for numeric types
      */
-    private double numericPrecision = 0;
+    private int numericPrecision = 0;
     
     /**
      * The maximum column length for numbers in characters
      */
-    private long numericLength = 0;
+    private int numericLength = 0;
 	
     /**
      * The maximum column length for dates in characters
      */
-    private long dateLength = 0;
+    private int dateLength = 0;
 	
     /**
      * Spaces for aligning the outputted SQL
@@ -67,7 +67,7 @@ public class ExternalTableColumn {
     /**
      * @return
      */
-    public long getStringLength() {
+    public int getStringLength() {
         return stringLength;
     }
 
@@ -81,21 +81,21 @@ public class ExternalTableColumn {
     /**
      * @return double
      */
-    public double getNumericPrecision() {
+    public int getNumericPrecision() {
         return numericPrecision;
     }
     
     /**
-     * @return long
+     * @return int
      */
-    public long getNumericLength() {
+    public int getNumericLength() {
         return numericLength;
     }
     
     /**
-     * @return long
+     * @return int
      */
-    public long getDateLength() {
+    public int getDateLength() {
         return dateLength;
     }
     
@@ -121,7 +121,7 @@ public class ExternalTableColumn {
     /**
      * @param stringLength
      */
-    public void setStringLength(long stringLength) {
+    public void setStringLength(int stringLength) {
         if (this.stringLength < stringLength)
             this.stringLength = stringLength;
     }
@@ -136,14 +136,14 @@ public class ExternalTableColumn {
     /**
      * @param numericPrecision
      */
-    public void setNumericPrecision(double numericPrecision) {
+    public void setNumericPrecision(int numericPrecision) {
         this.numericPrecision = numericPrecision;
     }
 	
     /**
      * @param numericLength
      */
-    public void setNumericLength(long numericLength) {
+    public void setNumericLength(int numericLength) {
         if (this.numericLength < numericLength)
             this.numericLength = numericLength;
     }
@@ -151,7 +151,7 @@ public class ExternalTableColumn {
     /**
      * @param dateLength
      */
-    public void setDateLength(long dateLength) {
+    public void setDateLength(int dateLength) {
         if (this.dateLength < dateLength)
             this.dateLength = dateLength;
     }

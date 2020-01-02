@@ -21,10 +21,15 @@ import org.apache.poi.ss.usermodel.Workbook; // interface
 import org.apache.poi.ss.usermodel.Sheet; // interface
 import org.apache.poi.ss.usermodel.Row; // interface
 import org.apache.poi.ss.usermodel.Cell; // interface
+import org.apache.poi.ss.usermodel.CellStyle; // interface
 import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.FormulaEvaluator;
 
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+import org.apache.poi.hssf.usermodel.HSSFFormulaEvaluator;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.poi.xssf.usermodel.XSSFFormulaEvaluator;
 
 import org.apache.poi.ss.usermodel.DateUtil;
 
@@ -75,8 +80,12 @@ public class ExternalTableGenerator {
     }
     
     static String newline = "\r\n";
+
+    private DataFormatter dataFormatter = new DataFormatter();
+
+    private FormulaEvaluator formulaEvaluator = null;
   
-    public static void main(String ... args) {
+    public static void main(String ... args) throws java.io.IOException {
     
         if (args.length == 0) {
             System.out.println(newline + "Usage: ExternalTableGenerator <excel_file_name 1> .. <excel_file_name N>" + newline);
@@ -131,7 +140,7 @@ public class ExternalTableGenerator {
     /**
      *  Open the specified .xls or .xlsx and process it
      */
-    private void execute() {
+    private void execute() throws java.io.IOException {
         info("Begin processing.");
 
         info("Using working directory " + new File(pwd).getAbsolutePath());
@@ -152,11 +161,32 @@ public class ExternalTableGenerator {
                     wb = new XSSFWorkbook(new FileInputStream(spreadsheet));
                 }
 
+                formulaEvaluator = wb.getCreationHelper().createFormulaEvaluator();
+                
+                formulaEvaluator.setIgnoreMissingWorkbooks(true);
+                
+                for (Sheet sheet : wb) {
+                    for (Row r : sheet) {
+                        for (Cell c : r) {
+                            switch(c.getCellType()) {
+                            case FORMULA:
+                                formulaEvaluator.evaluateFormulaCell(c);
+                                break;
+                                    
+                            default:
+                                break;
+                            }
+                        }
+                    }
+                }
+                
                 info("Processing workbook " + spreadsheet);
 
                 processWorkbook(wb, i == 0, i == spreadsheets.size() - 1);                
             } catch (Exception e) {
                 e.printStackTrace();
+                
+                throw e;
             }
         }
 
@@ -169,7 +199,7 @@ public class ExternalTableGenerator {
      * @param sheet
      * @param table
      */
-    private void processSheet(Sheet sheet, ExternalTable table, boolean first, boolean last) {
+    private void processSheet(Sheet sheet, ExternalTable table, boolean first, boolean last) throws java.io.IOException {
         //Write out a .csv file based upon the sheet
         if (writeCsv(sheet, table, first, last) && last) {
             // Add the ddl for the table to the script
@@ -182,7 +212,7 @@ public class ExternalTableGenerator {
      * Iterate through each sheet in the workbook
      * and process it
      */
-    private void processWorkbook(Workbook wb, boolean first, boolean last) {
+    private void processWorkbook(Workbook wb, boolean first, boolean last) throws java.io.IOException {
 
         //if (!first && !(externalTables.size() == wb.getNumberOfSheets())) {
         //    throw new RuntimeException("External tables size (" + externalTables.size() + ") should be equal to the number of sheets (" + wb.getNumberOfSheets() + ")");
@@ -234,7 +264,10 @@ public class ExternalTableGenerator {
         col.setStringLength(value.length());
 
         if (value != null && value.length() > 0) {
-            debug("getStringValue for column '" + col.getName() + "' and value '" + value + "'" );
+            debug( "getStringValue for column '" + col.getName() +
+                   "', value '" + value + "'" +
+                   "', length " + col.getStringLength() +
+                   " and format " + cell.getCellStyle().getDataFormatString() );
         }
         
         return value;
@@ -253,15 +286,36 @@ public class ExternalTableGenerator {
             value = dateFormat.format(date);
             
             col.setDateLength(value.length());
-        } else {
-            value = "" + cell.getNumericCellValue();
             
-            // store the length first since it may be important in setType()
-            col.setNumericLength(value.length());
-            col.setNumericPrecision(cell.getNumericCellValue());
-        }
+            debug( "getNumericValue for date column '" + col.getName() +
+                   "', value '" + value +
+                   "', length " + col.getDateLength() +
+                   " and format " + cell.getCellStyle().getDataFormatString() );
+        } else {
+            // Remove trailing % and remove thousands separator (comma)
+            value = dataFormatter.formatCellValue(cell, formulaEvaluator).replace(",", "");
 
-        debug("getNumericValue for column '" + col.getName() + "' and value '" + value + "'" );
+            if (value.endsWith("%")) {
+                // replace the percent symbol and divide by 100
+                value = (new Double(Double.valueOf(value.replace("%", "")) / 100)).toString();
+            }
+
+            String[] parts = value.split("\\.");
+
+            for (int i = 0; i < parts.length; i++) {
+                debug("parts[" + i + "]= '" + parts[i] + "'");
+            }
+
+            // store the length first since it may be important in setType()
+            col.setNumericLength((parts.length == 1 ? parts[0].length() : parts[0].length() + parts[1].length()));
+            col.setNumericPrecision((parts.length == 1 ? 0 : parts[1].length()));
+
+            debug( "getNumericValue for numeric column '" + col.getName() +
+                   "', value '" + value +
+                   "', length " + col.getNumericLength() +
+                   ", precision " + col.getNumericPrecision() +
+                   " and format " + cell.getCellStyle().getDataFormatString() );
+        }
 
         return value;
     }
@@ -283,7 +337,7 @@ public class ExternalTableGenerator {
      * Write the given String content to the file system
      * using the String filename specified
      */
-    private void write(String content, String filename, Boolean utf8, boolean append) {
+    private void write(String content, String filename, Boolean utf8, boolean append) throws java.io.IOException {
 
         try {
             // GJP 2019-10-18  Seems not necessary.
@@ -305,6 +359,8 @@ public class ExternalTableGenerator {
             info("Finished " + (append ? "appending to" : "creating") + " " + filename);
         } catch (Exception e) {
             e.printStackTrace();
+            
+            throw e;
         }
     }
 
@@ -314,7 +370,7 @@ public class ExternalTableGenerator {
      * @param first  First workbook
      * @param last   Last workbook
      */
-    private Boolean writeCsv(Sheet sheet, ExternalTable table, boolean first, boolean last) {
+    private Boolean writeCsv(Sheet sheet, ExternalTable table, boolean first, boolean last) throws java.io.IOException {
 
         Row names = sheet.getRow(COLUMN_NAME_ROW);
         Row types = sheet.getRow(COLUMN_TYPE_ROW);
@@ -379,76 +435,84 @@ public class ExternalTableGenerator {
                                         
                     String value = null;
                     String missingColumns = "";
-                    
-                    for ( ; c < cell.getColumnIndex(); c++ ) {
-                        missingColumns += ExternalTable.SEPARATOR;
-                    }
-                    
-                    assert(c == cell.getColumnIndex());
-                    
-                    ExternalTableColumn col = (r == COLUMN_NAME_ROW && first ? new ExternalTableColumn() : table.getColumn(c));                    
 
-                    switch(r)
-                        {
-                        case COLUMN_NAME_ROW:
-                            // Some names are just numbers, strangely enough (column name 14)
-                            try {
-                                value = cell.getStringCellValue();
-                                // string?
-                            } catch (IllegalStateException e1) {
-                                // java.lang.IllegalStateException: Cannot get a STRING value from a NUMERIC cell
-                                value = "" + cell.getNumericCellValue();
-                            }
-                            
-                            info((first ? "Scanning" : "Skipping") + " heading " + (c+1) + ": " + value);
-
-                            if (first) {
-                                col.setName(value);
-                                table.addColumn(col);
-                            } else {
-                                if (!col.getName().equals(ExternalTable.getName(value))) {
-                                    throw new RuntimeException("Column name (" + col.getName() + ") should be equal to the external table name (" + ExternalTable.getName(value) + ")"); // check column name
-                                }
-                            }
-                            csvEmptyRow += ExternalTable.SEPARATOR;                            
-                            break;
-                    
-                        default:
-                            // column type can switch from string to numeric but not vice versa
-                            switch(cell.getCellType())
-                                {
-                                case FORMULA:
-                                    // try in this order: numbers, strings (a boolean is a string in the database) and booleans
-                                    try {
-                                        value = getNumericValue(cell, col);
-                                    } catch (IllegalStateException e1) {
-                                        try {
-                                            value = getStringValue(cell, col);
-                                        } catch (IllegalStateException e2) {
-                                            value = getBooleanValue(cell, col);
-                                        }
-                                    }
-                                    break;
-
-                                case BLANK:
-                                case STRING:
-                                    value = getStringValue(cell, col);
-                                    break;
-                                    
-                                case BOOLEAN:
-                                    value = getBooleanValue(cell, col);
-                                    break;
-
-                                case NUMERIC:
-                                    value = getNumericValue(cell, col);
-                                    break;
-
-                                default:
-                                    throw new RuntimeException("Cell Type of cell " + col.getName() + " unknown: " + cell.getCellType()); 
-                                }
+                    if (r != COLUMN_NAME_ROW) {
+                        for ( ; c < Math.min(table.getNrColumns()-1, cell.getColumnIndex()); c++ ) {
+                            missingColumns += ExternalTable.SEPARATOR;
                         }
+                        assert(c == cell.getColumnIndex() || c == table.getNrColumns()-1);
+                    } else {
+                        assert(c == cell.getColumnIndex());
+                    }
 
-                    // The Column Name row is only prin,ted the first time else it is used for verification
+                    if (c != cell.getColumnIndex()) {
+                        // the cell is beyond the number of heading cells
+                        value = "";
+                    } else {
+                        ExternalTableColumn col = (r == COLUMN_NAME_ROW && first ? new ExternalTableColumn() : table.getColumn(c));                    
+
+                        switch(r)
+                            {
+                            case COLUMN_NAME_ROW:
+                                // Some names are just numbers, strangely enough (column name 14)
+                                try {
+                                    value = cell.getStringCellValue();
+                                    // string?
+                                } catch (IllegalStateException e1) {
+                                    // java.lang.IllegalStateException: Cannot get a STRING value from a NUMERIC cell
+                                    value = dataFormatter.formatCellValue(cell);
+                                }
+                            
+                                info((first ? "Scanning" : "Skipping") + " heading " + (c+1) + ": " + value);
+
+                                if (first) {
+                                    col.setName(value);
+                                    table.addColumn(col);
+                                } else {
+                                    if (!col.getName().equals(ExternalTable.getName(value))) {
+                                        throw new RuntimeException("Column name (" + col.getName() + ") should be equal to the external table name (" + ExternalTable.getName(value) + ")"); // check column name
+                                    }
+                                }
+                                csvEmptyRow += ExternalTable.SEPARATOR;                            
+                                break;
+                    
+                            default:
+                                // column type can switch from string to numeric but not vice versa
+                                switch(cell.getCellType())
+                                    {
+                                    case FORMULA:
+                                        // try in this order: numbers, strings (a boolean is a string in the database) and booleans
+                                        try {
+                                            value = getNumericValue(cell, col);
+                                        } catch (IllegalStateException e1) {
+                                            try {
+                                                value = getStringValue(cell, col);
+                                            } catch (IllegalStateException e2) {
+                                                value = getBooleanValue(cell, col);
+                                            }
+                                        }
+                                        break;
+
+                                    case BLANK:
+                                    case STRING:
+                                        value = getStringValue(cell, col);
+                                        break;
+                                    
+                                    case BOOLEAN:
+                                        value = getBooleanValue(cell, col);
+                                        break;
+
+                                    case NUMERIC:
+                                        value = getNumericValue(cell, col);
+                                        break;
+
+                                    default:
+                                        throw new RuntimeException("Cell Type of cell " + col.getName() + " unknown: " + cell.getCellType()); 
+                                    }
+                            }
+                    }
+
+                    // The Column Name row is only printed the first time else it is used for verification
                     if (r == COLUMN_NAME_ROW && !first) continue;                        
 
                     // see https://en.wikipedia.org/wiki/Comma-separated_values
