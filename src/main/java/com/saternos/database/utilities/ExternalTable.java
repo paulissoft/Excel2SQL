@@ -67,14 +67,26 @@ public class ExternalTable {
      * Name of the External Table
      */
     private String name = null;
+    
+    /**
+     * Field separator.
+     */
+    private String fieldSeparator = null;
+	
+    /**
+     * Enclose string.
+     */
+    private String enclosureString = null;
 	
     /**
      * Replace all blanks in a given name with underscores
      * @param name
      */
 
-    public ExternalTable(String name){
+    public ExternalTable(String name, String fieldSeparator, String enclosureString){
         setName(name);
+        setFieldSeparator(fieldSeparator);
+        setEnclosureString(enclosureString);
         columns = new ArrayList<ExternalTableColumn>();
         badFileName = this.name + BAD_EXTENTION;
         discardFileName = this.name + DISCARD_EXTENTION;
@@ -163,7 +175,7 @@ public class ExternalTable {
             + "    DISCARDFILE load_dir:'" + getDiscardFileName() + "'" + newline
             + "    LOGFILE load_dir:'" + getLogFileName() + "'" + newline
             // Oracle 12C syntax
-            + "    FIELDS TERMINATED BY '" + SEPARATOR + "' OPTIONALLY ENCLOSED BY '" + ENCLOSURE + "' DATE_FORMAT DATE MASK \"yyyy-mm-dd\""+ newline
+            + "    FIELDS TERMINATED BY '" + getFieldSeparator() + "' OPTIONALLY ENCLOSED BY '" + getEnclosureString() + "' DATE_FORMAT DATE MASK \"yyyy-mm-dd\""+ newline
             // Oracle 12CR2 syntax
             // + "    FIELDS DATE_FORMAT DATE MASK \"yyyy-mm-dd\" CSV WITHOUT EMBEDDED RECORD TERMINATORS"+ newline
             + "    MISSING FIELD VALUES ARE NULL"+ newline
@@ -252,8 +264,28 @@ public class ExternalTable {
     public static String getName(String name) {
         return (name == null ? null : double_quote + Normalizer.normalize(name, Normalizer.Form.NFD).replaceAll("\\p{M}", "").trim() + double_quote);
     }
-    
-    public static final String SEPARATOR = ",";
 
-    public static final String ENCLOSURE = "\"";    
+    /**
+     * 
+     * @param fieldSeparator
+     */
+    public void setFieldSeparator(String fieldSeparator) {
+        this.fieldSeparator = fieldSeparator;
+    }
+
+    public String getFieldSeparator() {
+        return this.fieldSeparator;
+    }
+
+    /**
+     * 
+     * @param enclosureString
+     */
+    public void setEnclosureString(String enclosureString) {
+        this.enclosureString = enclosureString;
+    }
+
+    public String getEnclosureString() {
+        return this.enclosureString;
+    }
 }

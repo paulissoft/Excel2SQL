@@ -52,14 +52,20 @@ import com.beust.jcommander.JCommander;
  */
 public class ExternalTableGenerator {
 
-    @Parameter(names = "-verbose", description = "Level of verbosity")
+    @Parameter(names = "--verbose", description = "Level of verbosity")
     private Integer verbose = 1;
 
-    @Parameter(names = "-sheet", description = "Sheet name regular expression to match")
-    private String sheetName = ".*";
+    @Parameter(names = "--sheet-name-expression", description = "Sheet name regular expression to match")
+    private String sheetNameExpression = ".*";
 
-    @Parameter(names = "-table", description = "The table name(s) to use instead of the sheet name(s)")
+    @Parameter(names = "--sql-table-name", description = "SQL table name to use instead of the sheet name")
     private List<String> tableNames = new ArrayList<>();
+
+    @Parameter(names = "--column-separator", description = "The column separator")
+    private String columnSeparator = ",";
+
+    @Parameter(names = "--enclosure-string", description = "The enclosure string")
+    private String enclosureString = "\"";
 
     /**
      * The Excel Spreadsheets (.xls or .xlsx) that are being accessed
@@ -221,8 +227,8 @@ public class ExternalTableGenerator {
         for (int i = 0; i < wb.getNumberOfSheets(); i++) {
             Sheet sheet = wb.getSheetAt(i);
 
-            if (!wb.getSheetName(i).matches(sheetName)) {
-                info("Skipping sheet " + i + ": " + wb.getSheetName(i) + " since it does not match " + sheetName);
+            if (!wb.getSheetName(i).matches(sheetNameExpression)) {
+                info("Skipping sheet " + i + ": " + wb.getSheetName(i) + " since it does not match " + sheetNameExpression);
                 continue;
             } else {
                 info("Processing sheet " + i + ": " + wb.getSheetName(i));
@@ -232,7 +238,7 @@ public class ExternalTableGenerator {
             final String tableName = ( i < tableNames.size() ? tableNames.get(i) : wb.getSheetName(i) );
 
             if (first) {
-                table = new ExternalTable(tableName);
+                table = new ExternalTable(tableName, columnSeparator, enclosureString);
                 externalTables.add(table);
             } else {
                 final String sqlTableName = ExternalTable.getName(tableName);
@@ -418,7 +424,7 @@ public class ExternalTableGenerator {
                         if (r == COLUMN_NAME_ROW) {
                             break;
                         } else {
-                            csvRow += ExternalTable.SEPARATOR;
+                            csvRow += table.getFieldSeparator();
                             continue;
                         }
                     }
@@ -438,7 +444,7 @@ public class ExternalTableGenerator {
 
                     if (r != COLUMN_NAME_ROW) {
                         for ( ; c < Math.min(table.getNrColumns()-1, cell.getColumnIndex()); c++ ) {
-                            missingColumns += ExternalTable.SEPARATOR;
+                            missingColumns += table.getFieldSeparator();
                         }
                         assert(c == cell.getColumnIndex() || c == table.getNrColumns()-1);
                     } else {
@@ -473,7 +479,7 @@ public class ExternalTableGenerator {
                                         throw new RuntimeException("Column name (" + col.getName() + ") should be equal to the external table name (" + ExternalTable.getName(value) + ")"); // check column name
                                     }
                                 }
-                                csvEmptyRow += ExternalTable.SEPARATOR;                            
+                                csvEmptyRow += table.getFieldSeparator();                            
                                 break;
                     
                             default:
@@ -516,11 +522,11 @@ public class ExternalTableGenerator {
                     if (r == COLUMN_NAME_ROW && !first) continue;                        
 
                     // see https://en.wikipedia.org/wiki/Comma-separated_values
-                    value.replace(ExternalTable.ENCLOSURE, ExternalTable.ENCLOSURE + ExternalTable.ENCLOSURE);
-                    if (value.contains(ExternalTable.ENCLOSURE) || value.contains(ExternalTable.SEPARATOR)) {
-                        value = ExternalTable.ENCLOSURE + value + ExternalTable.ENCLOSURE;
+                    value.replace(table.getEnclosureString(), table.getEnclosureString() + table.getEnclosureString());
+                    if (value.contains(table.getEnclosureString()) || value.contains(table.getFieldSeparator())) {
+                        value = table.getEnclosureString() + value + table.getEnclosureString();
                     }
-                    csvRow += missingColumns + value + ExternalTable.SEPARATOR;
+                    csvRow += missingColumns + value + table.getFieldSeparator();
                 } catch (Exception e) {
                     System.err.println("Error in line " + (r+1) + " for column " + (c+1));
                     throw e;
