@@ -6,6 +6,7 @@ package com.saternos.database.utilities;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.PrintStream;
 import java.io.FileWriter;
 import java.nio.charset.StandardCharsets;
 import java.io.Writer;
@@ -55,10 +56,10 @@ public class ExternalTableGenerator {
     @Parameter(names = "--verbose", description = "Level of verbosity")
     private Integer verbose = 1;
 
-    @Parameter(names = "--sheet-name-expression", description = "Sheet name regular expression to match")
+    @Parameter(names = "--sheet-name-expression", description = "Sheet name(s) must match this regular expression")
     private String sheetNameExpression = ".*";
 
-    @Parameter(names = "--sql-table-name", description = "SQL table name to use instead of the sheet name")
+    @Parameter(names = "--sql-table-name", description = "A list of SQL table name(s) to use instead of the sheet name(s)")
     private List<String> tableNames = new ArrayList<>();
 
     @Parameter(names = "--column-separator", description = "The column separator")
@@ -67,10 +68,16 @@ public class ExternalTableGenerator {
     @Parameter(names = "--enclosure-string", description = "The enclosure string")
     private String enclosureString = "\"";
 
+    @Parameter(names = "--encoding", description = "The encoding to use (default \"windows-1252\")")
+    private String encoding = "windows-1252";
+    
+    @Parameter(names = "--write-bom", description = "Write the BOM at the beginning of the file.")
+    private boolean writeBOM = false;
+
     /**
      * The Excel Spreadsheets (.xls or .xlsx) that are being accessed
      */
-    @Parameter(description = "Spreadsheets")
+    @Parameter(description = "spreadsheet...")
     private List<String> spreadsheets = new ArrayList<String>();
 
     private void info(String str) {
@@ -92,18 +99,31 @@ public class ExternalTableGenerator {
     private FormulaEvaluator formulaEvaluator = null;
   
     public static void main(String ... args) throws java.io.IOException {
-    
-        if (args.length == 0) {
-            System.out.println(newline + "Usage: ExternalTableGenerator <excel_file_name 1> .. <excel_file_name N>" + newline);
-            System.exit(0);
-        }
-        
         ExternalTableGenerator generator = new ExternalTableGenerator();
 
-        JCommander.newBuilder()
+        JCommander jc = JCommander.newBuilder()
             .addObject(generator)
-            .build()
-            .parse(args);
+            .build();
+
+        jc.setProgramName("ExternalTableGenerator");
+
+        try {
+            jc.parse(args);
+            // Check file exists as a regular file
+            for (int i = 0; i < generator.spreadsheets.size(); i++) {
+                File f = new File(generator.spreadsheets.get(i));
+
+                try {
+                    assert(f.exists() && !f.isDirectory());
+                } catch(AssertionError e) {
+                    System.err.println("File '" + generator.spreadsheets.get(i) + "' does not exist or is not a regular file");
+                    throw e;
+                }
+            }
+        } catch(Exception e) {
+            jc.usage();
+            throw e;
+        }
 
         generator.execute();
     }
@@ -196,7 +216,7 @@ public class ExternalTableGenerator {
             }
         }
 
-        write(ddlString, "ExternalTables.sql", false, false);
+        write(ddlString, "ExternalTables.sql", "UTF-8", false, false);
             
         info("Processing complete.");
     }
@@ -238,7 +258,7 @@ public class ExternalTableGenerator {
             final String tableName = ( i < tableNames.size() ? tableNames.get(i) : wb.getSheetName(i) );
 
             if (first) {
-                table = new ExternalTable(tableName, columnSeparator, enclosureString);
+                table = new ExternalTable(tableName, columnSeparator, enclosureString, encoding);
                 externalTables.add(table);
             } else {
                 final String sqlTableName = ExternalTable.getName(tableName);
@@ -265,7 +285,8 @@ public class ExternalTableGenerator {
     }
 
     private String getStringValue(Cell cell, ExternalTableColumn col) {
-        final String value = cell.getStringCellValue();
+        // final String value = cell.getStringCellValue();
+        final String value = cell.getRichStringCellValue().getString();        
         
         col.setStringLength(value.length());
 
@@ -340,27 +361,30 @@ public class ExternalTableGenerator {
     /**
      * @param content
      * @param filename
+     * @param encoding
+     * @param writeBOM
+     * @param append
+     *
      * Write the given String content to the file system
      * using the String filename specified
      */
-    private void write(String content, String filename, Boolean utf8, boolean append) throws java.io.IOException {
+    private void write(String content, String filename, String encoding, boolean writeBOM, boolean append) throws java.io.IOException {
 
         try {
             // GJP 2019-10-18  Seems not necessary.
             // File f = new File(filename);
             // f.createNewFile();
 
-            Writer fr;
+            PrintStream out = new PrintStream(new FileOutputStream(filename, append), false, encoding);
 
-            if ( !utf8 ) {
-                fr = new OutputStreamWriter(new FileOutputStream(filename, append), "windows-1252");
-            } else {
-                fr = new OutputStreamWriter(new FileOutputStream(filename, append), StandardCharsets.UTF_8);
+            // write the BOM?
+            if (!append && encoding.equals("UTF-8") && writeBOM) {
+                byte[] bom = {(byte)0xEF, (byte)0xBB, (byte)0xBF};
+                out.write(bom);
             }
-            
-            fr.write(content);
-            fr.flush();
-            fr.close();
+
+            out.print(content);
+            out.close();
             
             info("Finished " + (append ? "appending to" : "creating") + " " + filename);
         } catch (Exception e) {
@@ -462,7 +486,8 @@ public class ExternalTableGenerator {
                             case COLUMN_NAME_ROW:
                                 // Some names are just numbers, strangely enough (column name 14)
                                 try {
-                                    value = cell.getStringCellValue();
+                                    // value = cell.getStringCellValue();
+                                    value = cell.getRichStringCellValue().getString();
                                     // string?
                                 } catch (IllegalStateException e1) {
                                     // java.lang.IllegalStateException: Cannot get a STRING value from a NUMERIC cell
@@ -519,7 +544,7 @@ public class ExternalTableGenerator {
                     }
 
                     // The Column Name row is only printed the first time else it is used for verification
-                    if (r == COLUMN_NAME_ROW && !first) continue;                        
+                    if (r == COLUMN_NAME_ROW && !first) continue;
 
                     // see https://en.wikipedia.org/wiki/Comma-separated_values
                     value.replace(table.getEnclosureString(), table.getEnclosureString() + table.getEnclosureString());
@@ -547,7 +572,7 @@ public class ExternalTableGenerator {
 
         if (csv.length() > 0) {
             // Final newline causes problems so remove it
-            write(csv.substring(0, csv.length()-1), table.getLocation(), false, !first);
+            write(csv.substring(0, csv.length()-1), table.getLocation(), this.encoding, this.writeBOM, !first);
 
             return true;
         } else {

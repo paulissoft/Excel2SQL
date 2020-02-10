@@ -79,20 +79,39 @@ public class ExternalTable {
     private String enclosureString = null;
 	
     /**
+     * Encoding string.
+     */
+    private String encoding = null;
+	
+    /**
      * Replace all blanks in a given name with underscores
      * @param name
      */
 
-    public ExternalTable(String name, String fieldSeparator, String enclosureString){
+    public ExternalTable(String name, String fieldSeparator, String enclosureString, String encoding) {
         setName(name);
         setFieldSeparator(fieldSeparator);
         setEnclosureString(enclosureString);
+        this.encoding = encoding;
         columns = new ArrayList<ExternalTableColumn>();
         badFileName = this.name + BAD_EXTENTION;
         discardFileName = this.name + DISCARD_EXTENTION;
         logFileName = this.name + LOG_EXTENTION;
     }
-	
+
+    private String getOracleCharacterSet()
+    {
+        switch(encoding)
+            {
+            case "windows-1252":
+                return "WE8MSWIN1252";
+            case "UTF-8":
+                return "AL32UTF8";
+            default:
+                throw new RuntimeException("Should have encoding of \"windows-1252\" or \"UTF-8\"");
+            }
+    }
+    
     /**
      * 
      * @param column
@@ -168,8 +187,23 @@ public class ExternalTable {
             + "  ACCESS PARAMETERS "+ newline
             + "  ("+ newline
             + "    RECORDS DELIMITED BY NEWLINE"+ newline
-            + "    CHARACTERSET WE8MSWIN1252"+ newline
-            + "    STRING SIZES ARE IN CHARACTERS"+ newline
+            + "    CHARACTERSET " + getOracleCharacterSet() + newline
+            /*
+             * Oracle documentation:
+             *
+             * STRING SIZES ARE IN
+             *
+             * The STRING SIZES ARE IN clause is used to indicate whether the
+             * lengths specified for character strings are in bytes or
+             * characters. If this clause is not specified, then the access
+             * driver uses the mode that the database uses. Character types
+             * with embedded lengths (such as VARCHAR) are also affected by
+             * this clause. If this clause is specified, then the embedded
+             * lengths are a character count, not a byte count. Specifying
+             * STRING SIZES ARE IN CHARACTERS is needed only when loading
+             * multibyte character sets, such as UTF16.
+             */                                                                                                   
+            + "    STRING SIZES ARE IN BYTES"+ newline
             + "    FIELD NAMES ALL FILES IGNORE"+ newline
             + "    BADFILE load_dir:'" + getBadFileName() + "'" + newline
             + "    DISCARDFILE load_dir:'" + getDiscardFileName() + "'" + newline
