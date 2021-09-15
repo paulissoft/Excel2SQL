@@ -83,12 +83,9 @@ public class ExternalTable {
      */
     private String encoding = null;
 	
-    /**
-     * Replace all blanks in a given name with underscores
-     * @param name
-     */
-
-    public ExternalTable(String name, String fieldSeparator, String enclosureString, String encoding) {
+    private boolean noExternalTable = false;
+    
+    public ExternalTable(String name, String fieldSeparator, String enclosureString, String encoding, boolean noExternalTable) {
         setName(name);
         setFieldSeparator(fieldSeparator);
         setEnclosureString(enclosureString);
@@ -97,6 +94,7 @@ public class ExternalTable {
         badFileName = this.name + BAD_EXTENTION;
         discardFileName = this.name + DISCARD_EXTENTION;
         logFileName = this.name + LOG_EXTENTION;
+        this.noExternalTable = noExternalTable;
     }
 
     private String getOracleCharacterSet()
@@ -119,6 +117,15 @@ public class ExternalTable {
     public void addColumn(ExternalTableColumn column)
     {
         columns.add(column);
+    }
+    
+    /**
+     * 
+     * @param column
+     */
+    public void addColumnFirst(ExternalTableColumn column)
+    {
+        columns.add(0, column);
     }
     
     /**
@@ -180,42 +187,48 @@ public class ExternalTable {
         }
         ddl = ddl.substring(0, ddl.lastIndexOf(","))+ //remove the last comma
             newline+
-            ") "+newline+"ORGANIZATION EXTERNAL"+ newline
-            + "(" + newline
-            + "  TYPE oracle_loader" + newline
-            + "  DEFAULT DIRECTORY load_dir"+ newline
-            + "  ACCESS PARAMETERS "+ newline
-            + "  ("+ newline
-            + "    RECORDS DELIMITED BY NEWLINE"+ newline
-            + "    CHARACTERSET " + getOracleCharacterSet() + newline
-            /*
-             * Oracle documentation:
-             *
-             * STRING SIZES ARE IN
-             *
-             * The STRING SIZES ARE IN clause is used to indicate whether the
-             * lengths specified for character strings are in bytes or
-             * characters. If this clause is not specified, then the access
-             * driver uses the mode that the database uses. Character types
-             * with embedded lengths (such as VARCHAR) are also affected by
-             * this clause. If this clause is specified, then the embedded
-             * lengths are a character count, not a byte count. Specifying
-             * STRING SIZES ARE IN CHARACTERS is needed only when loading
-             * multibyte character sets, such as UTF16.
-             */                                                                                                   
-            + "    STRING SIZES ARE IN BYTES"+ newline
-            + "    FIELD NAMES ALL FILES IGNORE"+ newline
-            + "    BADFILE load_dir:'" + getBadFileName() + "'" + newline
-            + "    DISCARDFILE load_dir:'" + getDiscardFileName() + "'" + newline
-            + "    LOGFILE load_dir:'" + getLogFileName() + "'" + newline
-            // Oracle 12C syntax
-            + "    FIELDS TERMINATED BY '" + getFieldSeparator() + "' OPTIONALLY ENCLOSED BY '" + getEnclosureString() + "' DATE_FORMAT DATE MASK \"yyyy-mm-dd\""+ newline
-            // Oracle 12CR2 syntax
-            // + "    FIELDS DATE_FORMAT DATE MASK \"yyyy-mm-dd\" CSV WITHOUT EMBEDDED RECORD TERMINATORS"+ newline
-            + "    MISSING FIELD VALUES ARE NULL"+ newline
-            + "  )"+ newline
-            + "  LOCATION ('"+ getLocation()+"')"+ newline
-            +") REJECT LIMIT 0;"+newline+newline+newline;
+            ") "+newline;
+
+        if (!noExternalTable) {
+            ddl += "ORGANIZATION EXTERNAL"+ newline
+                + "(" + newline
+                + "  TYPE oracle_loader" + newline
+                + "  DEFAULT DIRECTORY load_dir"+ newline
+                + "  ACCESS PARAMETERS "+ newline
+                + "  ("+ newline
+                + "    RECORDS DELIMITED BY NEWLINE"+ newline
+                + "    CHARACTERSET " + getOracleCharacterSet() + newline
+                /*
+                 * Oracle documentation:
+                 *
+                 * STRING SIZES ARE IN
+                 *
+                 * The STRING SIZES ARE IN clause is used to indicate whether the
+                 * lengths specified for character strings are in bytes or
+                 * characters. If this clause is not specified, then the access
+                 * driver uses the mode that the database uses. Character types
+                 * with embedded lengths (such as VARCHAR) are also affected by
+                 * this clause. If this clause is specified, then the embedded
+                 * lengths are a character count, not a byte count. Specifying
+                 * STRING SIZES ARE IN CHARACTERS is needed only when loading
+                 * multibyte character sets, such as UTF16.
+                 */                                                                                                   
+                + "    STRING SIZES ARE IN BYTES"+ newline
+                + "    FIELD NAMES ALL FILES IGNORE"+ newline
+                + "    BADFILE load_dir:'" + getBadFileName() + "'" + newline
+                + "    DISCARDFILE load_dir:'" + getDiscardFileName() + "'" + newline
+                + "    LOGFILE load_dir:'" + getLogFileName() + "'" + newline
+                // Oracle 12C syntax
+                + "    FIELDS TERMINATED BY '" + getFieldSeparator() + "' OPTIONALLY ENCLOSED BY '" + getEnclosureString() + "' DATE_FORMAT DATE MASK \"yyyy-mm-dd\""+ newline
+                // Oracle 12CR2 syntax
+                // + "    FIELDS DATE_FORMAT DATE MASK \"yyyy-mm-dd\" CSV WITHOUT EMBEDDED RECORD TERMINATORS"+ newline
+                + "    MISSING FIELD VALUES ARE NULL"+ newline
+                + "  )"+ newline
+                + "  LOCATION ('"+ getLocation()+"')"+ newline
+                +") REJECT LIMIT 0"+newline+newline+newline;
+        }
+
+        ddl += ";";
 		
         return ddl;
 	

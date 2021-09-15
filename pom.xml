@@ -21,6 +21,7 @@
     <jcommander.version>1.81</jcommander.version>
     <maven-enforcer-plugin.version>3.0.0</maven-enforcer-plugin.version>
     <maven.version>3.6.1</maven.version>
+    <checkstyle-maven-plugin.version>3.1.2</checkstyle-maven-plugin.version>
   </properties>
   
   <dependencies>
@@ -59,13 +60,30 @@
           <configuration>
             <!--verbose>true</verbose-->
             <compilerArgs>
-              <arg>-Xlint:unchecked</arg>
+              <arg>-Xlint</arg>
+              <!--arg>-Xlint:unchecked</arg-->
             </compilerArgs>
           </configuration>
         </plugin>
       </plugins>
     </pluginManagement>
     <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-checkstyle-plugin</artifactId>
+        <version>${checkstyle-maven-plugin.version}</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
