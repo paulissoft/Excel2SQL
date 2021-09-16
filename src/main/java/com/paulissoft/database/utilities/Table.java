@@ -1,7 +1,7 @@
 /*
  * Created on Dec 14, 2004
  */
-package com.saternos.database.utilities;
+package com.paulissoft.database.utilities;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -13,26 +13,26 @@ import java.text.Normalizer;
  * @author Administrator
  * @version 1.0
  */
-public class ExternalTable {
+public class Table {
 	
     static String newline="\r\n";
 
     static String double_quote = "\"";
     
     /**
-     * Bad File Name for the External Table
+     * Bad File Name for the Table
      */
     private String badFileName = null;
 	
     /**
-     * Discard File Name for the External Table
+     * Discard File Name for the Table
      */
     private String discardFileName = null;
 	
     /**
-     * List of the External Table columns
+     * List of the Table columns
      */
-    private List<ExternalTableColumn> columns = null;
+    private List<TableColumn> columns = null;
 
     /**
      * Comma Separated Values File Extention
@@ -40,31 +40,31 @@ public class ExternalTable {
     private final String CSV_EXTENTION = ".csv";
 	
     /**
-     * External table bad file extention
+     * table bad file extention
      */
     private final String BAD_EXTENTION = ".bad";
 	
     /**
-     * External table discard file extention
+     * table discard file extention
      */
     private final String DISCARD_EXTENTION = ".dsc";
 	
     /**
-     * External table log file extention
+     * table log file extention
      */
     private final String LOG_EXTENTION = ".log";
     /**
-     * Directory Location referenced by the External Table
+     * Directory Location referenced by the Table
      */
     private String dirLocation = null;
 	
     /**
-     * Log File Name for the External Table
+     * Log File Name for the Table
      */	
     private String logFileName = null;
 	
     /**
-     * Name of the External Table
+     * Name of the Table
      */
     private String name = null;
     
@@ -85,12 +85,12 @@ public class ExternalTable {
 	
     private boolean noExternalTable = false;
     
-    public ExternalTable(String name, String fieldSeparator, String enclosureString, String encoding, boolean noExternalTable) {
+    public Table(String name, String fieldSeparator, String enclosureString, String encoding, boolean noExternalTable) {
         setName(name);
         setFieldSeparator(fieldSeparator);
         setEnclosureString(enclosureString);
         this.encoding = encoding;
-        columns = new ArrayList<ExternalTableColumn>();
+        columns = new ArrayList<TableColumn>();
         badFileName = this.name + BAD_EXTENTION;
         discardFileName = this.name + DISCARD_EXTENTION;
         logFileName = this.name + LOG_EXTENTION;
@@ -114,7 +114,7 @@ public class ExternalTable {
      * 
      * @param column
      */
-    public void addColumn(ExternalTableColumn column)
+    public void addColumn(TableColumn column)
     {
         columns.add(column);
     }
@@ -123,7 +123,7 @@ public class ExternalTable {
      * 
      * @param column
      */
-    public void addColumnFirst(ExternalTableColumn column)
+    public void addColumnFirst(TableColumn column)
     {
         columns.add(0, column);
     }
@@ -132,7 +132,7 @@ public class ExternalTable {
      * 
      * @return column
      */
-    public ExternalTableColumn getColumn(int i)
+    public TableColumn getColumn(int i)
     {
         return columns.get(i);
     }
@@ -171,7 +171,7 @@ public class ExternalTable {
     }
 	
     /**
-     * Return the SQL String to create the External table
+     * Return the SQL String to create the table
      * which references the newly created CSV files derived
      * from the original Excel sheet
      * @return
@@ -182,15 +182,16 @@ public class ExternalTable {
 		
         Iterator iter = columns.iterator();
         while (iter.hasNext()){
-            ExternalTableColumn c = (ExternalTableColumn)iter.next();
-            ddl +=c.getColumnDdl();
+            TableColumn c = (TableColumn)iter.next();
+            ddl += c.getColumnDdl();
         }
         ddl = ddl.substring(0, ddl.lastIndexOf(","))+ //remove the last comma
             newline+
-            ") "+newline;
+            ")";
 
         if (!noExternalTable) {
-            ddl += "ORGANIZATION EXTERNAL"+ newline
+            ddl += newline
+                + "ORGANIZATION EXTERNAL"+ newline
                 + "(" + newline
                 + "  TYPE oracle_loader" + newline
                 + "  DEFAULT DIRECTORY load_dir"+ newline
@@ -228,7 +229,7 @@ public class ExternalTable {
                 +") REJECT LIMIT 0"+newline+newline+newline;
         }
 
-        ddl += ";";
+        ddl += ";"+newline;
 		
         return ddl;
 	
@@ -244,7 +245,7 @@ public class ExternalTable {
 	
     /**
      * Get the location of the file referenced by the 
-     * External table.  This will be the same as the 
+     * table.  This will be the same as the 
      * table name with a .csv extention
      * @return
      */

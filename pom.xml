@@ -1,7 +1,7 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
-  <groupId>com.saternos.database.utilities</groupId>
+  <groupId>com.paulissoft.database.utilities</groupId>
   <artifactId>XL2ETB</artifactId>
   <packaging>jar</packaging>
   <version>1.0-SNAPSHOT</version>
@@ -22,6 +22,7 @@
     <maven-enforcer-plugin.version>3.0.0</maven-enforcer-plugin.version>
     <maven.version>3.6.1</maven.version>
     <checkstyle-maven-plugin.version>3.1.2</checkstyle-maven-plugin.version>
+    <opencsv.version>2.4</opencsv.version>
   </properties>
   
   <dependencies>
@@ -46,6 +47,13 @@
       <groupId>com.beust</groupId>
       <artifactId>jcommander</artifactId>
       <version>${jcommander.version}</version>
+    </dependency>
+    <!-- https://mvnrepository.com/artifact/au.com.bytecode/opencsv -->
+    <dependency>
+      <groupId>au.com.bytecode</groupId>
+      <artifactId>opencsv</artifactId>
+      <version>${opencsv.version}</version>
+      <scope>test</scope>
     </dependency>
   </dependencies>
 
@@ -97,7 +105,7 @@
             <configuration>
               <transformers>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                  <mainClass>com.saternos.database.utilities.ExternalTableGenerator</mainClass>
+                  <mainClass>com.paulissoft.database.utilities.TableGenerator</mainClass>
                 </transformer>
               </transformers>
               <filters>

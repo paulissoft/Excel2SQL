@@ -1,7 +1,7 @@
 /*
  * Created on Dec 13, 2004  
  */
-package com.saternos.database.utilities;
+package com.paulissoft.database.utilities;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -15,17 +15,11 @@ import java.io.OutputStreamWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Date;
+import java.util.Arrays;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Iterator;
 
-import org.apache.poi.hssf.eventusermodel.HSSFEventFactory;
-import org.apache.poi.hssf.eventusermodel.HSSFListener;
-import org.apache.poi.hssf.eventusermodel.HSSFRequest;
-import org.apache.poi.hssf.record.CommonObjectDataSubRecord;
-import org.apache.poi.hssf.record.ObjRecord;
-import org.apache.poi.hssf.record.Record;
-import org.apache.poi.hssf.record.SubRecord;
 import org.apache.poi.hssf.usermodel.HSSFFormulaEvaluator;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 
@@ -45,21 +39,23 @@ import org.apache.poi.ss.usermodel.FormulaEvaluator;
 import org.apache.poi.xssf.usermodel.XSSFFormulaEvaluator;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
-import com.beust.jcommander.Parameter;
+import com.beust.jcommander.IParameterValidator;
 import com.beust.jcommander.JCommander;
+import com.beust.jcommander.Parameter;
+import com.beust.jcommander.ParameterException;
 
 /**
  * @author Casimir Saternos
  * @version 1.0
  * 
  *         This program is run at the command line. Given one or more excel
- *         spreadsheets, a script is generated to create the external table(s)
+ *         spreadsheets, a script is generated to create the table(s)
  *         that references the data from the spreadsheets. 
  *
  *         When multiple spreadsheets are supplied, 
  *         they must all have the same number and names of sheets.
  */
-public class ExternalTableGenerator {
+public class TableGenerator {
 
     @Parameter(names = "--verbose", description = "Level of verbosity")
     private Integer verbose = 1;
@@ -85,11 +81,14 @@ public class ExternalTableGenerator {
     @Parameter(names = "--no-header", description = "The first row does NOT contain the column names")
     private boolean noHeader = false;
 
-    @Parameter(names = "--no-external-table", description = "Do not create a script for an external table just for a table")
-    private boolean noExternalTable = false;
+    @Parameter(names = "--sql-database", description = "The SQL database (Oracle, PostgresQL)", required = false, validateWith = ValidSqlDatabases.class)
+    private String sqlDatabase = "Oracle";
 
-    @Parameter(names = "--add-row-number", description = "Add the sheet row number (starting from 1) in the CSV?")
-    private boolean addRowNumber = false;
+    @Parameter(names = "--one-table", description = "Each sheet to one table?")
+    private boolean oneTable = false;
+
+    @Parameter(names = "--add-metadata", description = "Add metadata like sheet name and row number (starting from 1) in the CSV?")
+    private boolean addMetadata = false;
 
     @Parameter(names = { "--help", "-h" }, description = "This help", help = true)
     private boolean help;
@@ -119,13 +118,13 @@ public class ExternalTableGenerator {
     private FormulaEvaluator formulaEvaluator = null;
   
     public static void main(String ... args) throws java.io.IOException {
-        ExternalTableGenerator generator = new ExternalTableGenerator();
+        TableGenerator generator = new TableGenerator();
 
         JCommander jc = JCommander.newBuilder()
             .addObject(generator)
             .build();
 
-        jc.setProgramName("ExternalTableGenerator");
+        jc.setProgramName("TableGenerator");
 
         try {
             jc.parse(args);
@@ -165,10 +164,10 @@ public class ExternalTableGenerator {
     private final int COLUMN_NAME_ROW = 0;
 
     /**
-     * List of external table definitions
+     * List of table definitions
      */
-    // private List<ExternalTableColumn> externalTables;
-    private List<ExternalTable> externalTables;
+    // private List<TableColumn> tables;
+    private List<Table> tables;
 
 
     /**
@@ -178,9 +177,9 @@ public class ExternalTableGenerator {
 
     private String ddlString = "";
   
-    public ExternalTableGenerator() {
+    public TableGenerator() {
         this.pwd = new File("").getAbsolutePath();    
-        this.externalTables = new ArrayList<ExternalTable>();
+        this.tables = new ArrayList<Table>();
     }
 
     /**
@@ -191,7 +190,7 @@ public class ExternalTableGenerator {
 
         info("Using working directory " + new File(pwd).getAbsolutePath());
 
-        if (!this.noExternalTable) {
+        if (this.sqlDatabase.equals("Oracle")) {
             ddlString = "CREATE /*OR REPLACE*/ DIRECTORY load_dir AS '"+pwd+"'"+newline+";"+newline+newline;
         } else {
             ddlString = "";
@@ -199,6 +198,12 @@ public class ExternalTableGenerator {
 
         for (int i = 0; i < spreadsheets.size(); i++) {
             final String spreadsheet = (new File(spreadsheets.get(i))).getAbsolutePath();
+            final boolean firstWorkbook = i == 0;
+            
+            if (oneTable && firstWorkbook) {
+                Table table = new Table("tables", columnSeparator, enclosureString, encoding, !this.sqlDatabase.equals("Oracle"));            
+                tables.add(table);
+            }
 
             try {
                 Workbook wb;
@@ -231,9 +236,7 @@ public class ExternalTableGenerator {
                 
                 info("Processing workbook " + spreadsheet);
 
-                processWorkbook(wb, i == 0, i == spreadsheets.size() - 1);
-
-                debugWorkbook(new FileInputStream(spreadsheet));
+                processWorkbook(wb, firstWorkbook, i == spreadsheets.size() - 1);
             } catch (Exception e) {
                 e.printStackTrace();
                 
@@ -241,7 +244,11 @@ public class ExternalTableGenerator {
             }
         }
 
-        write(ddlString, (!this.noExternalTable ? "External" : "") + "Tables.sql", "UTF-8", false, false);
+        if (oneTable) {
+            ddlString += tables.get(0).getDdl();
+        }
+
+        write(ddlString, "tables.sql", "UTF-8", false, false);
             
         info("Processing complete.");
     }
@@ -249,10 +256,12 @@ public class ExternalTableGenerator {
     /**
      * @param sheet
      * @param table
+     * @param firstWorkbook  First workbook
+     * @param lastWorkbook   Last workbook
      */
-    private void processSheet(Sheet sheet, ExternalTable table, boolean first, boolean last) throws java.io.IOException {
+    private void processSheet(Sheet sheet, Table table, boolean firstWorkbook, boolean lastWorkbook) throws java.io.IOException {
         //Write out a .csv file based upon the sheet
-        if (writeCsv(sheet, table, first, last) && last) {
+        if (writeCsv(sheet, table, firstWorkbook, lastWorkbook) && lastWorkbook && !oneTable) {
             // Add the ddl for the table to the script
             ddlString += table.getDdl();
         }
@@ -263,10 +272,10 @@ public class ExternalTableGenerator {
      * Iterate through each sheet in the workbook
      * and process it
      */
-    private void processWorkbook(Workbook wb, boolean first, boolean last) throws java.io.IOException {
+    private void processWorkbook(Workbook wb, boolean firstWorkbook, boolean lastWorkbook) throws java.io.IOException {
 
-        //if (!first && !(externalTables.size() == wb.getNumberOfSheets())) {
-        //    throw new RuntimeException("External tables size (" + externalTables.size() + ") should be equal to the number of sheets (" + wb.getNumberOfSheets() + ")");
+        //if (!firstWorkbook && !(tables.size() == wb.getNumberOfSheets())) {
+        //    throw new RuntimeException("External tables size (" + tables.size() + ") should be equal to the number of sheets (" + wb.getNumberOfSheets() + ")");
         //}
 
         for (int i = 0; i < wb.getNumberOfSheets(); i++) {
@@ -279,46 +288,42 @@ public class ExternalTableGenerator {
                 info("Processing sheet " + i + ": " + wb.getSheetName(i));
             }
                 
-            ExternalTable table = null;
-            final String tableName = ( i < tableNames.size() ? tableNames.get(i) : wb.getSheetName(i) );
+            Table table = null;
 
-            if (first) {
-                table = new ExternalTable(tableName, columnSeparator, enclosureString, encoding, noExternalTable);
-                externalTables.add(table);
+            if (oneTable) {
+                table = tables.get(0);
             } else {
-                final String sqlTableName = ExternalTable.getName(tableName);
+                final String tableName = ( i < tableNames.size() ? tableNames.get(i) : wb.getSheetName(i) );
 
-                for (int index = 0; index < externalTables.size(); index++) {
-                    if (externalTables.get(index).getName().equals(sqlTableName)) {
-                        table = externalTables.get(index);
-                        break;
+                if (firstWorkbook) {
+                    table = new Table(tableName, columnSeparator, enclosureString, encoding, !this.sqlDatabase.equals("Oracle"));
+                    tables.add(table);
+                } else {
+                    final String sqlTableName = Table.getName(tableName);
+
+                    for (int index = 0; index < tables.size(); index++) {
+                        if (tables.get(index).getName().equals(sqlTableName)) {
+                            table = tables.get(index);
+                            break;
+                        }
                     }
-                }
                 
-                if (table == null) {
-                    throw new RuntimeException("Could not find table name (" + sqlTableName + ")");
+                    if (table == null) {
+                        throw new RuntimeException("Could not find table name (" + sqlTableName + ")");
+                    }
                 }
             }
 
             
-            processSheet(sheet, table, first, last);
+            processSheet(sheet, table, firstWorkbook, lastWorkbook);
 
-            if (last) {      
+            if (lastWorkbook) {      
                 info("Table "+ table.getName() + " processed." );
             }
         }        
     }
 
-    private void debugWorkbook(InputStream spreadsheet) throws java.io.IOException {
-        // GJP 2021-09-15 Check Boolean cells
-                
-        HSSFRequest req = new HSSFRequest();
-        req.addListenerForAllRecords(new ProcessFile());
-        HSSFEventFactory factory = new HSSFEventFactory();
-        factory.processEvents(req, spreadsheet);
-    }
-
-    private String getStringValue(Cell cell, ExternalTableColumn col) {
+    private String getStringValue(Cell cell, TableColumn col) {
         // final String value = cell.getStringCellValue();
         final String value = cell.getRichStringCellValue().getString();        
         
@@ -334,7 +339,7 @@ public class ExternalTableGenerator {
         return value;
     }
 
-    private String getNumericValue(Cell cell, ExternalTableColumn col) {
+    private String getNumericValue(Cell cell, TableColumn col) {
         String value = null;
 
         // Test if a date! See https://poi.apache.org/help/faq.html
@@ -381,7 +386,7 @@ public class ExternalTableGenerator {
         return value;
     }
 
-    private String getBooleanValue(Cell cell, ExternalTableColumn col) {
+    private String getBooleanValue(Cell cell, TableColumn col) {
         final String value = "" + cell.getBooleanCellValue();
         
         // Treat it as a STRING.
@@ -432,10 +437,10 @@ public class ExternalTableGenerator {
     /**
      * @param sheet
      * @param table
-     * @param first  First workbook
-     * @param last   Last workbook
+     * @param firstWorkbook  First workbook
+     * @param lastWorkbook   Last workbook
      */
-    private Boolean writeCsv(Sheet sheet, ExternalTable table, boolean first, boolean last) throws java.io.IOException {
+    private Boolean writeCsv(Sheet sheet, Table table, boolean firstWorkbook, boolean lastWorkbook) throws java.io.IOException {
 
         // Row names = sheet.getRow(COLUMN_NAME_ROW);
 
@@ -513,7 +518,7 @@ public class ExternalTableGenerator {
                         for ( ; c < cell.getColumnIndex(); c++ ) {
                             // add this column as a header column?
                             if (c >= table.getNrColumns()) {
-                                ExternalTableColumn col = new ExternalTableColumn();
+                                TableColumn col = new TableColumn();
 
                                 debug("adding column " + (c+1) + " as header (1)");
                                 col.setName(number2excelColumnName(c+1));
@@ -525,7 +530,7 @@ public class ExternalTableGenerator {
                         
                         // add this column as a header column?
                         if (c >= table.getNrColumns()) {
-                            ExternalTableColumn col = new ExternalTableColumn();
+                            TableColumn col = new TableColumn();
 
                             debug("adding column " + (c+1) + " as header (2)");
                             col.setName(number2excelColumnName(c+1));
@@ -549,7 +554,7 @@ public class ExternalTableGenerator {
                         debug("Processing Excel column " + (c+1));
                         
                         // new column if 
-                        ExternalTableColumn col = (!this.noHeader && r == COLUMN_NAME_ROW && first ? new ExternalTableColumn() : table.getColumn(c));                    
+                        TableColumn col = (!this.noHeader && r == COLUMN_NAME_ROW && firstWorkbook ? new TableColumn() : table.getColumn(c));                    
 
                         if (!this.noHeader && r == COLUMN_NAME_ROW) {
                             // Some names are just numbers, strangely enough (column name 14)
@@ -562,14 +567,14 @@ public class ExternalTableGenerator {
                                 value = dataFormatter.formatCellValue(cell);
                             }
                             
-                            info((first ? "Scanning" : "Skipping") + " heading " + (c+1) + ": " + value);
+                            info((firstWorkbook ? "Scanning" : "Skipping") + " heading " + (c+1) + ": " + value);
 
-                            if (first) {
+                            if (firstWorkbook) {
                                 col.setName(value);
                                 table.addColumn(col);
                             } else {
-                                if (!col.getName().equals(ExternalTable.getName(value))) {
-                                    throw new RuntimeException("Column name (" + col.getName() + ") should be equal to the external table name (" + ExternalTable.getName(value) + ")"); // check column name
+                                if (!col.getName().equals(Table.getName(value))) {
+                                    throw new RuntimeException("Column name (" + col.getName() + ") should be equal to the table name (" + Table.getName(value) + ")"); // check column name
                                 }
                             }
                         } else {
@@ -609,7 +614,7 @@ public class ExternalTableGenerator {
                     }
 
                     // The Column Name row is only printed the first time else it is used for verification
-                    if (!this.noHeader && r == COLUMN_NAME_ROW && !first) continue;
+                    if (!this.noHeader && r == COLUMN_NAME_ROW && !firstWorkbook) continue;
 
                     // see https://en.wikipedia.org/wiki/Comma-separated_values
                     value.replace(table.getEnclosureString(), table.getEnclosureString() + table.getEnclosureString());
@@ -623,9 +628,12 @@ public class ExternalTableGenerator {
                 }
             }
             if (!isEmptyRow(csvRow)) {
-                csv += (this.addRowNumber ? "" + (row.getRowNum()+1) + table.getFieldSeparator() : "" ) + csvRow + newline;
+                if (this.addMetadata) {
+                    csv += sheet.getSheetName() + table.getFieldSeparator() + (row.getRowNum()+1) + table.getFieldSeparator();
+                }
+                csv += csvRow + newline;
             } else {
-                info("Skipping row " + (r+1) + " since it is empty");
+                debug("Skipping row " + (r+1) + " since it is empty");
             }
         }
         
@@ -635,18 +643,27 @@ public class ExternalTableGenerator {
                     
         System.out.println("");
 
-        if (this.addRowNumber) {
-            ExternalTableColumn col = new ExternalTableColumn();
+        if (this.addMetadata) {
+            TableColumn col = new TableColumn();
 
+            // this will become second
             debug("adding row column");
             col.setName("ROW");
             col.setNumericLength(12);
+            table.addColumnFirst(col);
+
+            col = new TableColumn();
+            
+            // this will become first
+            debug("adding sheet column");
+            col.setName("SHEET");
+            col.setStringLength(100); // should suffice
             table.addColumnFirst(col);            
         }
 
         if (csv.length() > 0) {
             // Final newline causes problems so remove it
-            write(csv.substring(0, csv.length()-1), table.getLocation(), this.encoding, this.writeBOM, !first);
+            write(csv.substring(0, csv.length()-1), table.getLocation(), this.encoding, this.writeBOM, !firstWorkbook);
 
             return true;
         } else {
@@ -680,28 +697,17 @@ public class ExternalTableGenerator {
     private boolean isEmptyRow(String row) {
         return row.replace(this.columnSeparator, "").length() == 0;
     }
-}
 
-
-class ProcessFile implements HSSFListener {
-
-    public void processRecord(Record record) {
-        switch (record.getSid()) {
-        case ObjRecord.sid:
-            ObjRecord objRec = (ObjRecord) record;
-            List<SubRecord> subRecords = objRec.getSubRecords();
-            for (SubRecord subRecord : subRecords) {
-                if (subRecord instanceof CommonObjectDataSubRecord) {
-                    CommonObjectDataSubRecord datasubRecord = (CommonObjectDataSubRecord) subRecord;
-                    if (datasubRecord.getObjectType() == CommonObjectDataSubRecord.OBJECT_TYPE_CHECKBOX) {
-                        System.out.println("ObjId: "
-                                           + datasubRecord.getObjectId() +
-                                           "Details: "
-                                           + datasubRecord.toString());
-                    }
-                }
+    public static class ValidSqlDatabases implements IParameterValidator {
+        @Override
+        public void validate(String name, String value) throws ParameterException {
+            List<String> databases = Arrays.asList("Oracle", "PostgresQL");
+        
+            if (!databases.contains(value)) {
+                throw new ParameterException("Parameter " + name + " (" + value +") is not a valid database (" + databases + ")");
             }
-            break;
         }
     }
 }
+
+

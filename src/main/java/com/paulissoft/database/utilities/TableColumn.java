@@ -1,7 +1,7 @@
 /*
  * Created on Dec 14, 2004
  */
-package com.saternos.database.utilities;
+package com.paulissoft.database.utilities;
 
 import java.text.Normalizer;
 
@@ -9,7 +9,7 @@ import java.text.Normalizer;
  * @author Casimir Saternos
  * @version 1.0
  */
-public class ExternalTableColumn {
+public class TableColumn {
 	
     static String newline="\r\n";
     
@@ -103,16 +103,16 @@ public class ExternalTableColumn {
      * @return
      */
     private String getSqlType() {
-
+        // Use SQL ANSI datatypes 
         if (stringLength == 0 && numericLength == 0 && dateLength == 0) {
-            return "VARCHAR2(1 CHAR)";
+            return "VARCHAR(1)";
         } else if (stringLength > 0 ||
                    (numericLength > 0 && dateLength > 0)) {
             // column includes a non empty string value or both numeric and date values: convert it to VARCHAR2
-            return "VARCHAR2(" + Math.max(Math.max(stringLength, numericLength), dateLength) + " CHAR)";
+            return "VARCHAR(" + Math.max(Math.max(stringLength, numericLength), dateLength) + ")";
         } else if (numericLength > 0) {
             // handle numeric precision here???
-            return "NUMBER";
+            return "DECIMAL";
         } else {
             return "DATE";
         }
