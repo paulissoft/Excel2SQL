@@ -67,39 +67,21 @@ public class Table {
      * Name of the Table
      */
     private String name = null;
+
+    private Settings settings = null;
     
-    /**
-     * Field separator.
-     */
-    private String fieldSeparator = null;
-	
-    /**
-     * Enclose string.
-     */
-    private String enclosureString = null;
-	
-    /**
-     * Encoding string.
-     */
-    private String encoding = null;
-	
-    private boolean noExternalTable = false;
-    
-    public Table(String name, String fieldSeparator, String enclosureString, String encoding, boolean noExternalTable) {
+    public Table(String name, Settings settings) {
         setName(name);
-        setFieldSeparator(fieldSeparator);
-        setEnclosureString(enclosureString);
-        this.encoding = encoding;
+        this.settings = settings;
         columns = new ArrayList<TableColumn>();
         badFileName = this.name + BAD_EXTENTION;
         discardFileName = this.name + DISCARD_EXTENTION;
         logFileName = this.name + LOG_EXTENTION;
-        this.noExternalTable = noExternalTable;
     }
 
     private String getOracleCharacterSet()
     {
-        switch(encoding)
+        switch(getEncoding())
             {
             case "windows-1252":
                 return "WE8MSWIN1252";
@@ -189,7 +171,7 @@ public class Table {
             newline+
             ")";
 
-        if (!noExternalTable) {
+        if (settings.sqlDatabase.equals(Settings.ORACLE)) {
             ddl += newline
                 + "ORGANIZATION EXTERNAL"+ newline
                 + "(" + newline
@@ -317,23 +299,19 @@ public class Table {
      * 
      * @param fieldSeparator
      */
-    public void setFieldSeparator(String fieldSeparator) {
-        this.fieldSeparator = fieldSeparator;
-    }
-
     public String getFieldSeparator() {
-        return this.fieldSeparator;
+        return this.settings.columnSeparator;
     }
 
     /**
      * 
      * @param enclosureString
      */
-    public void setEnclosureString(String enclosureString) {
-        this.enclosureString = enclosureString;
+    public String getEnclosureString() {
+        return this.settings.enclosureString;
     }
 
-    public String getEnclosureString() {
-        return this.enclosureString;
+    public String getEncoding() {
+        return this.settings.encoding;
     }
 }

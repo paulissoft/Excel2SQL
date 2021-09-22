@@ -43,6 +43,12 @@ public class TableColumn {
      * Spaces for aligning the outputted SQL
      */
     private final String SPACES = "  ";
+
+    private Settings settings = null;
+
+    public TableColumn(Settings settings) {
+        this.settings = settings;
+    }
 	
     /**
      * @return

@@ -1,6 +1,3 @@
-/*
- * Created on Dec 13, 2004  
- */
 package com.paulissoft.database.utilities;
 
 import java.io.File;
@@ -39,10 +36,7 @@ import org.apache.poi.ss.usermodel.FormulaEvaluator;
 import org.apache.poi.xssf.usermodel.XSSFFormulaEvaluator;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
-import com.beust.jcommander.IParameterValidator;
 import com.beust.jcommander.JCommander;
-import com.beust.jcommander.Parameter;
-import com.beust.jcommander.ParameterException;
 
 /**
  * @author Casimir Saternos
@@ -57,56 +51,16 @@ import com.beust.jcommander.ParameterException;
  */
 public class TableGenerator {
 
-    @Parameter(names = "--verbose", description = "Level of verbosity")
-    private Integer verbose = 1;
-
-    @Parameter(names = "--sheet-name-expression", description = "Sheet name(s) must match this regular expression")
-    private String sheetNameExpression = ".*";
-
-    @Parameter(names = "--sql-table-name", description = "A list of SQL table name(s) to use instead of the sheet name(s)")
-    private List<String> tableNames = new ArrayList<>();
-
-    @Parameter(names = "--column-separator", description = "The column separator")
-    private String columnSeparator = ",";
-
-    @Parameter(names = "--enclosure-string", description = "The enclosure string")
-    private String enclosureString = "\"";
-
-    @Parameter(names = "--encoding", description = "The encoding to use (default \"windows-1252\")")
-    private String encoding = "windows-1252";
+    private static Settings settings = new Settings();
     
-    @Parameter(names = "--write-bom", description = "Write the BOM at the beginning of the file.")
-    private boolean writeBOM = false;
-
-    @Parameter(names = "--no-header", description = "The first row does NOT contain the column names")
-    private boolean noHeader = false;
-
-    @Parameter(names = "--sql-database", description = "The SQL database (Oracle, PostgresQL)", required = false, validateWith = ValidSqlDatabases.class)
-    private String sqlDatabase = "Oracle";
-
-    @Parameter(names = "--one-table", description = "Each sheet to one table?")
-    private boolean oneTable = false;
-
-    @Parameter(names = "--add-metadata", description = "Add metadata like sheet name and row number (starting from 1) in the CSV?")
-    private boolean addMetadata = false;
-
-    @Parameter(names = { "--help", "-h" }, description = "This help", help = true)
-    private boolean help;
-    
-    /**
-     * The Excel Spreadsheets (.xls or .xlsx) that are being accessed
-     */
-    @Parameter(description = "spreadsheet...", required = true)
-    private List<String> spreadsheets = new ArrayList<String>();
-
     private void info(String str) {
-        if (verbose >= 1) {
+        if (settings.verbose >= 1) {
             System.out.println("INFO: " + str);
         }
     }
 
     private void debug(String str) {
-        if (verbose >= 2) {
+        if (settings.verbose >= 2) {
             System.out.println("DEBUG: " + str);
         }
     }
@@ -121,7 +75,7 @@ public class TableGenerator {
         TableGenerator generator = new TableGenerator();
 
         JCommander jc = JCommander.newBuilder()
-            .addObject(generator)
+            .addObject(settings)
             .build();
 
         jc.setProgramName("TableGenerator");
@@ -129,17 +83,17 @@ public class TableGenerator {
         try {
             jc.parse(args);
 
-            if (generator.help) {
+            if (settings.help) {
                 jc.usage();
             } else {
                 // Check file exists as a regular file
-                for (int i = 0; i < generator.spreadsheets.size(); i++) {
-                    File f = new File(generator.spreadsheets.get(i));
+                for (int i = 0; i < settings.spreadsheets.size(); i++) {
+                    File f = new File(settings.spreadsheets.get(i));
 
                     try {
                         assert(f.exists() && !f.isDirectory());
                     } catch(AssertionError e) {
-                        System.err.println("File '" + generator.spreadsheets.get(i) + "' does not exist or is not a regular file");
+                        System.err.println("File '" + settings.spreadsheets.get(i) + "' does not exist or is not a regular file");
                         throw e;
                     }
                 }
@@ -149,7 +103,7 @@ public class TableGenerator {
             throw e;
         }
 
-        if (!generator.help) {
+        if (!settings.help) {
             generator.execute();
         }
     }
@@ -190,18 +144,14 @@ public class TableGenerator {
 
         info("Using working directory " + new File(pwd).getAbsolutePath());
 
-        if (this.sqlDatabase.equals("Oracle")) {
-            ddlString = "CREATE /*OR REPLACE*/ DIRECTORY load_dir AS '"+pwd+"'"+newline+";"+newline+newline;
-        } else {
-            ddlString = "";
-        }
+        ddlString = preamble();
 
-        for (int i = 0; i < spreadsheets.size(); i++) {
-            final String spreadsheet = (new File(spreadsheets.get(i))).getAbsolutePath();
+        for (int i = 0; i < settings.spreadsheets.size(); i++) {
+            final String spreadsheet = (new File(settings.spreadsheets.get(i))).getAbsolutePath();
             final boolean firstWorkbook = i == 0;
             
-            if (oneTable && firstWorkbook) {
-                Table table = new Table("tables", columnSeparator, enclosureString, encoding, !this.sqlDatabase.equals("Oracle"));            
+            if (settings.oneTable && firstWorkbook) {
+                Table table = new Table("tables", settings);            
                 tables.add(table);
             }
 
@@ -236,7 +186,7 @@ public class TableGenerator {
                 
                 info("Processing workbook " + spreadsheet);
 
-                processWorkbook(wb, firstWorkbook, i == spreadsheets.size() - 1);
+                processWorkbook(wb, firstWorkbook, i == settings.spreadsheets.size() - 1);
             } catch (Exception e) {
                 e.printStackTrace();
                 
@@ -244,7 +194,7 @@ public class TableGenerator {
             }
         }
 
-        if (oneTable) {
+        if (settings.oneTable) {
             ddlString += tables.get(0).getDdl();
         }
 
@@ -261,7 +211,7 @@ public class TableGenerator {
      */
     private void processSheet(Sheet sheet, Table table, boolean firstWorkbook, boolean lastWorkbook) throws java.io.IOException {
         //Write out a .csv file based upon the sheet
-        if (writeCsv(sheet, table, firstWorkbook, lastWorkbook) && lastWorkbook && !oneTable) {
+        if (writeCsv(sheet, table, firstWorkbook, lastWorkbook) && lastWorkbook && !settings.oneTable) {
             // Add the ddl for the table to the script
             ddlString += table.getDdl();
         }
@@ -281,8 +231,8 @@ public class TableGenerator {
         for (int i = 0; i < wb.getNumberOfSheets(); i++) {
             Sheet sheet = wb.getSheetAt(i);
 
-            if (!wb.getSheetName(i).matches(sheetNameExpression)) {
-                info("Skipping sheet " + i + " (" + wb.getSheetName(i) + ") since it does not match \"" + sheetNameExpression + "\"");
+            if (!wb.getSheetName(i).matches(settings.sheetNameExpression)) {
+                info("Skipping sheet " + i + " (" + wb.getSheetName(i) + ") since it does not match \"" + settings.sheetNameExpression + "\"");
                 continue;
             } else {
                 info("Processing sheet " + i + " (" + wb.getSheetName(i) + ")");
@@ -290,13 +240,13 @@ public class TableGenerator {
                 
             Table table = null;
 
-            if (oneTable) {
+            if (settings.oneTable) {
                 table = tables.get(0);
             } else {
-                final String tableName = ( i < tableNames.size() ? tableNames.get(i) : wb.getSheetName(i) );
+                final String tableName = ( i < settings.tableNames.size() ? settings.tableNames.get(i) : wb.getSheetName(i) );
 
                 if (firstWorkbook) {
-                    table = new Table(tableName, columnSeparator, enclosureString, encoding, !this.sqlDatabase.equals("Oracle"));
+                    table = new Table(tableName, settings);
                     tables.add(table);
                 } else {
                     final String sqlTableName = Table.getName(tableName);
@@ -482,7 +432,7 @@ public class TableGenerator {
             // 1) there is no header (we may always add column names) OR
             // 2) this is the column name row OR
             // 3) the column is part of the columns found
-            for (short c = 0; (this.noHeader || r == COLUMN_NAME_ROW || c < table.getNrColumns()); c++) {
+            for (short c = 0; (settings.noHeader || r == COLUMN_NAME_ROW || c < table.getNrColumns()); c++) {
                 debug("Processing Excel column " + (c+1));
                 debug("Number of table columns: " + table.getNrColumns());
                             
@@ -492,7 +442,7 @@ public class TableGenerator {
                     if (cell == null) {
                         debug("No cell defined");
 
-                        if (this.noHeader || r == COLUMN_NAME_ROW) {
+                        if (settings.noHeader || r == COLUMN_NAME_ROW) {
                             break; // no header column to add
                         } else {
                             csvRow.add(null);
@@ -506,19 +456,19 @@ public class TableGenerator {
 
                     // Sometimes there may be cells missing so after cell column index 0 may come cell column index 2.
                     // But not for the header!
-                    if (!this.noHeader && r == COLUMN_NAME_ROW && !(c == cell.getColumnIndex())) {
+                    if (!settings.noHeader && r == COLUMN_NAME_ROW && !(c == cell.getColumnIndex())) {
                         throw new RuntimeException("There should be no columns missing for the header");
                     }
                                         
                     String value = null;
                     ArrayList<String> missingColumns = new ArrayList<String>();
 
-                    if (this.noHeader) {
+                    if (settings.noHeader) {
                         // a data row when there is no header: add missing columns
                         for ( ; c < cell.getColumnIndex(); c++ ) {
                             // add this column as a header column?
                             if (c >= table.getNrColumns()) {
-                                TableColumn col = new TableColumn();
+                                TableColumn col = new TableColumn(settings);
 
                                 debug("adding column " + (c+1) + " as header (1)");
                                 col.setName(number2excelColumnName(c+1));
@@ -530,7 +480,7 @@ public class TableGenerator {
                         
                         // add this column as a header column?
                         if (c >= table.getNrColumns()) {
-                            TableColumn col = new TableColumn();
+                            TableColumn col = new TableColumn(settings);
 
                             debug("adding column " + (c+1) + " as header (2)");
                             col.setName(number2excelColumnName(c+1));
@@ -554,9 +504,9 @@ public class TableGenerator {
                         debug("Processing Excel column " + (c+1));
                         
                         // new column if 
-                        TableColumn col = (!this.noHeader && r == COLUMN_NAME_ROW && firstWorkbook ? new TableColumn() : table.getColumn(c));                    
+                        TableColumn col = (!settings.noHeader && r == COLUMN_NAME_ROW && firstWorkbook ? new TableColumn(settings) : table.getColumn(c));                    
 
-                        if (!this.noHeader && r == COLUMN_NAME_ROW) {
+                        if (!settings.noHeader && r == COLUMN_NAME_ROW) {
                             // Some names are just numbers, strangely enough (column name 14)
                             try {
                                 // value = cell.getStringCellValue();
@@ -614,7 +564,7 @@ public class TableGenerator {
                     }
 
                     // The Column Name row is only printed the first time else it is used for verification
-                    if (!this.noHeader && r == COLUMN_NAME_ROW && !firstWorkbook) continue;
+                    if (!settings.noHeader && r == COLUMN_NAME_ROW && !firstWorkbook) continue;
 
                     // see https://en.wikipedia.org/wiki/Comma-separated_values
                     value.replace(table.getEnclosureString(), table.getEnclosureString() + table.getEnclosureString());
@@ -629,7 +579,7 @@ public class TableGenerator {
                 }
             }
             if (!isEmptyRow(csvRow)) {
-                if (this.addMetadata) {
+                if (settings.addMetadata) {
                     csvRow.add(0, sheet.getSheetName());
                     csvRow.add(1, String.valueOf(row.getRowNum()+1));
                 }
@@ -645,8 +595,8 @@ public class TableGenerator {
                     
         System.out.println("");
 
-        if (this.addMetadata) {
-            TableColumn col = new TableColumn();
+        if (settings.addMetadata) {
+            TableColumn col = new TableColumn(settings);
 
             // this will become second
             debug("adding row column");
@@ -654,7 +604,7 @@ public class TableGenerator {
             col.setNumericLength(12);
             table.addColumnFirst(col);
 
-            col = new TableColumn();
+            col = new TableColumn(settings);
             
             // this will become first
             debug("adding sheet column");
@@ -690,7 +640,7 @@ public class TableGenerator {
                 }
             }
 
-            write(csv, table.getLocation(), this.encoding, this.writeBOM, !firstWorkbook);
+            write(csv, table.getLocation(), settings.encoding, settings.writeBOM, !firstWorkbook);
 
             return true;
         } else {
@@ -733,16 +683,11 @@ public class TableGenerator {
         return true;
     }
 
-    public static class ValidSqlDatabases implements IParameterValidator {
-        @Override
-        public void validate(String name, String value) throws ParameterException {
-            List<String> databases = Arrays.asList("Oracle", "PostgresQL");
-        
-            if (!databases.contains(value)) {
-                throw new ParameterException("Parameter " + name + " (" + value +") is not a valid database (" + databases + ")");
-            }
+    private String preamble() {
+        if (settings.sqlDatabase.equals(Settings.ORACLE)) {
+            return "CREATE /*OR REPLACE*/ DIRECTORY load_dir AS '"+pwd+"'"+newline+";"+newline+newline;
+        } else {
+            return "";
         }
     }
 }
-
-
