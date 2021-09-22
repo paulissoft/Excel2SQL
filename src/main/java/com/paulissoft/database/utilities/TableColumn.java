@@ -10,10 +10,6 @@ import java.text.Normalizer;
  * @version 1.0
  */
 public class TableColumn {
-	
-    static String newline="\r\n";
-    
-    static String double_quote = "\"";
     
     /**
      * The maximum column length for strings in characters (not bytes)
@@ -58,7 +54,7 @@ public class TableColumn {
      */
     public String getColumnDdl() {
 
-        return SPACES + getName() + SPACES + getSqlType() + "," + newline;
+        return SPACES + getName() + SPACES + getSqlType() + "," + Settings.NL;
     }
     /**
      * @return
@@ -67,7 +63,7 @@ public class TableColumn {
      */
     public String getColumnLoaderLine() {
 		
-        return SPACES + getName() + "," + newline;
+        return SPACES + getName() + "," + Settings.NL;
     }
 	
     /**
@@ -81,7 +77,7 @@ public class TableColumn {
      * @return
      */
     public String getName() {
-        return (name == null ? null : double_quote + name + double_quote);
+        return (name == null ? null : Settings.QQ + name + Settings.QQ);
     }
 	
     /**

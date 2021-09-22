@@ -15,10 +15,6 @@ import java.text.Normalizer;
  */
 public class Table {
 	
-    static String newline="\r\n";
-
-    static String double_quote = "\"";
-    
     /**
      * Bad File Name for the Table
      */
@@ -160,7 +156,7 @@ public class Table {
      */
     public String getDdl()
     {
-        String ddl = "CREATE TABLE " +  getName() +newline+"("+ newline;
+        String ddl = "CREATE TABLE " +  getName() +Settings.NL+"("+ Settings.NL;
 		
         Iterator iter = columns.iterator();
         while (iter.hasNext()){
@@ -168,19 +164,19 @@ public class Table {
             ddl += c.getColumnDdl();
         }
         ddl = ddl.substring(0, ddl.lastIndexOf(","))+ //remove the last comma
-            newline+
+            Settings.NL+
             ")";
 
         if (settings.sqlDatabase.equals(Settings.ORACLE)) {
-            ddl += newline
-                + "ORGANIZATION EXTERNAL"+ newline
-                + "(" + newline
-                + "  TYPE oracle_loader" + newline
-                + "  DEFAULT DIRECTORY load_dir"+ newline
-                + "  ACCESS PARAMETERS "+ newline
-                + "  ("+ newline
-                + "    RECORDS DELIMITED BY NEWLINE"+ newline
-                + "    CHARACTERSET " + getOracleCharacterSet() + newline
+            ddl += Settings.NL
+                + "ORGANIZATION EXTERNAL"+ Settings.NL
+                + "(" + Settings.NL
+                + "  TYPE oracle_loader" + Settings.NL
+                + "  DEFAULT DIRECTORY load_dir"+ Settings.NL
+                + "  ACCESS PARAMETERS "+ Settings.NL
+                + "  ("+ Settings.NL
+                + "    RECORDS DELIMITED BY SETTINGS.NL"+ Settings.NL
+                + "    CHARACTERSET " + getOracleCharacterSet() + Settings.NL
                 /*
                  * Oracle documentation:
                  *
@@ -196,22 +192,22 @@ public class Table {
                  * STRING SIZES ARE IN CHARACTERS is needed only when loading
                  * multibyte character sets, such as UTF16.
                  */                                                                                                   
-                + "    STRING SIZES ARE IN BYTES"+ newline
-                + "    FIELD NAMES ALL FILES IGNORE"+ newline
-                + "    BADFILE load_dir:'" + getBadFileName() + "'" + newline
-                + "    DISCARDFILE load_dir:'" + getDiscardFileName() + "'" + newline
-                + "    LOGFILE load_dir:'" + getLogFileName() + "'" + newline
+                + "    STRING SIZES ARE IN BYTES"+ Settings.NL
+                + "    FIELD NAMES ALL FILES IGNORE"+ Settings.NL
+                + "    BADFILE load_dir:'" + getBadFileName() + "'" + Settings.NL
+                + "    DISCARDFILE load_dir:'" + getDiscardFileName() + "'" + Settings.NL
+                + "    LOGFILE load_dir:'" + getLogFileName() + "'" + Settings.NL
                 // Oracle 12C syntax
-                + "    FIELDS TERMINATED BY '" + getFieldSeparator() + "' OPTIONALLY ENCLOSED BY '" + getEnclosureString() + "' DATE_FORMAT DATE MASK \"yyyy-mm-dd\""+ newline
+                + "    FIELDS TERMINATED BY '" + getFieldSeparator() + "' OPTIONALLY ENCLOSED BY '" + getEnclosureString() + "' DATE_FORMAT DATE MASK \"yyyy-mm-dd\""+ Settings.NL
                 // Oracle 12CR2 syntax
-                // + "    FIELDS DATE_FORMAT DATE MASK \"yyyy-mm-dd\" CSV WITHOUT EMBEDDED RECORD TERMINATORS"+ newline
-                + "    MISSING FIELD VALUES ARE NULL"+ newline
-                + "  )"+ newline
-                + "  LOCATION ('"+ getLocation()+"')"+ newline
-                +") REJECT LIMIT 0"+newline+newline+newline;
+                // + "    FIELDS DATE_FORMAT DATE MASK \"yyyy-mm-dd\" CSV WITHOUT EMBEDDED RECORD TERMINATORS"+ Settings.NL
+                + "    MISSING FIELD VALUES ARE NULL"+ Settings.NL
+                + "  )"+ Settings.NL
+                + "  LOCATION ('"+ getLocation()+"')"+ Settings.NL
+                +") REJECT LIMIT 0"+Settings.NL+Settings.NL+Settings.NL;
         }
 
-        ddl += ";"+newline;
+        ddl += ";"+Settings.NL;
 		
         return ddl;
 	
@@ -248,7 +244,7 @@ public class Table {
      * @return
      */
     public String getName() {
-        return (name == null ? null : double_quote + name + double_quote);
+        return (name == null ? null : Settings.QQ + name + Settings.QQ);
     }
 	
     /**
@@ -292,7 +288,7 @@ public class Table {
     }
 
     public static String getName(String name) {
-        return (name == null ? null : double_quote + Normalizer.normalize(name, Normalizer.Form.NFD).replaceAll("\\p{M}", "").trim() + double_quote);
+        return (name == null ? null : Settings.QQ + Normalizer.normalize(name, Normalizer.Form.NFD).replaceAll("\\p{M}", "").trim() + Settings.QQ);
     }
 
     /**

@@ -1,5 +1,7 @@
 package com.paulissoft.database.utilities;
 
+import java.io.File;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -10,6 +12,13 @@ import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParameterException;
 
 class Settings {
+    final static String NL = "\r\n";
+    final static String QQ = "\"";
+    /**
+     * Present working directory
+     */
+    final static String PWD = new File("").getAbsolutePath();
+
 
     final static String ORACLE = "Oracle";
     final static String POSTGRESQL = "PostgresQL";
@@ -35,8 +44,11 @@ class Settings {
     @Parameter(names = "--write-bom", description = "Write the BOM at the beginning of the file.")
     protected boolean writeBOM = false;
 
-    @Parameter(names = "--no-header", description = "The first row does NOT contain the column names")
-    protected boolean noHeader = false;
+    @Parameter(names = "--header-row-from", description = "The first header row (0 means no header)")
+    protected Integer headerRowFrom = 1;
+
+    @Parameter(names = "--header-row-till", description = "The last header row (0 means no header)")
+    protected Integer headerRowTill = 1;
 
     @Parameter(names = "--sql-database", description = "The SQL database (Oracle, PostgresQL)", required = false, validateWith = ValidSqlDatabases.class)
     protected String sqlDatabase = "Oracle";

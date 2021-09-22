@@ -65,8 +65,6 @@ public class TableGenerator {
         }
     }
     
-    static String newline = "\r\n";
-
     private DataFormatter dataFormatter = new DataFormatter();
 
     private FormulaEvaluator formulaEvaluator = null;
@@ -111,28 +109,15 @@ public class TableGenerator {
     // All sheets in the workbook use the following constants.
   
     /**
-     * The index of the row where the values that are used
-     * for the names of the table columns are retrieved.
-     * But only if !noHeader
-     */
-    private final int COLUMN_NAME_ROW = 0;
-
-    /**
      * List of table definitions
      */
     // private List<TableColumn> tables;
     private List<Table> tables;
 
 
-    /**
-     * Present working directory
-     */
-    private String pwd;
-
     private String ddlString = "";
   
     public TableGenerator() {
-        this.pwd = new File("").getAbsolutePath();    
         this.tables = new ArrayList<Table>();
     }
 
@@ -142,7 +127,7 @@ public class TableGenerator {
     private void execute() throws java.io.IOException {
         info("Begin processing.");
 
-        info("Using working directory " + new File(pwd).getAbsolutePath());
+        info("Using working directory " + new File(Settings.PWD).getAbsolutePath());
 
         ddlString = preamble();
 
@@ -392,15 +377,15 @@ public class TableGenerator {
      */
     private Boolean writeCsv(Sheet sheet, Table table, boolean firstWorkbook, boolean lastWorkbook) throws java.io.IOException {
 
-        // Row names = sheet.getRow(COLUMN_NAME_ROW);
-
         ArrayList<ArrayList<String>> csvRows = new ArrayList<ArrayList<String>>();
         String progress = null;
 
         Iterator<Row> rowIterator = sheet.rowIterator();
             
-        for (int r = COLUMN_NAME_ROW; rowIterator.hasNext(); r++) {
-
+        for (int r = 0; rowIterator.hasNext(); r++) {
+            final boolean noHeader = settings.headerRowFrom == 0;
+            final boolean isHeaderRow = !noHeader && (r >= settings.headerRowFrom - 1 && r <= settings.headerRowTill - 1);
+            
             debug("Processing Excel row " + (r+1));
             
             switch (r % 10)
@@ -432,7 +417,7 @@ public class TableGenerator {
             // 1) there is no header (we may always add column names) OR
             // 2) this is the column name row OR
             // 3) the column is part of the columns found
-            for (short c = 0; (settings.noHeader || r == COLUMN_NAME_ROW || c < table.getNrColumns()); c++) {
+            for (short c = 0; (noHeader || isHeaderRow || c < table.getNrColumns()); c++) {
                 debug("Processing Excel column " + (c+1));
                 debug("Number of table columns: " + table.getNrColumns());
                             
@@ -442,7 +427,7 @@ public class TableGenerator {
                     if (cell == null) {
                         debug("No cell defined");
 
-                        if (settings.noHeader || r == COLUMN_NAME_ROW) {
+                        if (noHeader || isHeaderRow) {
                             break; // no header column to add
                         } else {
                             csvRow.add(null);
@@ -456,14 +441,14 @@ public class TableGenerator {
 
                     // Sometimes there may be cells missing so after cell column index 0 may come cell column index 2.
                     // But not for the header!
-                    if (!settings.noHeader && r == COLUMN_NAME_ROW && !(c == cell.getColumnIndex())) {
+                    if (isHeaderRow && !(c == cell.getColumnIndex())) {
                         throw new RuntimeException("There should be no columns missing for the header");
                     }
                                         
                     String value = null;
                     ArrayList<String> missingColumns = new ArrayList<String>();
 
-                    if (settings.noHeader) {
+                    if (noHeader) {
                         // a data row when there is no header: add missing columns
                         for ( ; c < cell.getColumnIndex(); c++ ) {
                             // add this column as a header column?
@@ -487,7 +472,7 @@ public class TableGenerator {
                             table.addColumn(col);
                         }
                         
-                    } else if (r != COLUMN_NAME_ROW) {
+                    } else if (!isHeaderRow) {
                         // a data row when there is a header: add missing columns
                         for ( ; c < Math.min(table.getNrColumns()-1, cell.getColumnIndex()); c++ ) {
                             missingColumns.add(null);
@@ -504,9 +489,9 @@ public class TableGenerator {
                         debug("Processing Excel column " + (c+1));
                         
                         // new column if 
-                        TableColumn col = (!settings.noHeader && r == COLUMN_NAME_ROW && firstWorkbook ? new TableColumn(settings) : table.getColumn(c));                    
+                        TableColumn col = (isHeaderRow && firstWorkbook ? new TableColumn(settings) : table.getColumn(c));                    
 
-                        if (!settings.noHeader && r == COLUMN_NAME_ROW) {
+                        if (isHeaderRow) {
                             // Some names are just numbers, strangely enough (column name 14)
                             try {
                                 // value = cell.getStringCellValue();
@@ -564,7 +549,7 @@ public class TableGenerator {
                     }
 
                     // The Column Name row is only printed the first time else it is used for verification
-                    if (!settings.noHeader && r == COLUMN_NAME_ROW && !firstWorkbook) continue;
+                    if (isHeaderRow && !firstWorkbook) continue;
 
                     // see https://en.wikipedia.org/wiki/Comma-separated_values
                     value.replace(table.getEnclosureString(), table.getEnclosureString() + table.getEnclosureString());
@@ -620,7 +605,7 @@ public class TableGenerator {
                 final ArrayList<String> row = csvRows.get(r);
 
                 if (r > 0) {
-                    csv += newline; // always a new line except for the last line
+                    csv += Settings.NL; // always a new line except for the last line
                 }
 
                 // add empty columns at the end if this row has less columns than the table column count
@@ -685,7 +670,7 @@ public class TableGenerator {
 
     private String preamble() {
         if (settings.sqlDatabase.equals(Settings.ORACLE)) {
-            return "CREATE /*OR REPLACE*/ DIRECTORY load_dir AS '"+pwd+"'"+newline+";"+newline+newline;
+            return "CREATE /*OR REPLACE*/ DIRECTORY load_dir AS '" + Settings.PWD + "'" + Settings.NL + ";" + Settings.NL + Settings.NL;
         } else {
             return "";
         }
