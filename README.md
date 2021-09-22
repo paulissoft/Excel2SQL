@@ -1,5 +1,5 @@
-# XL2ETB
-Excel file to Oracle External Table
+# Excel2SQL
+Convert an Excel file to CSV and SQL scripts.
 
 This project is originally from the article posted on https://www.oracle.com/technetwork/articles/saternos-tables-090560.html. The author is Casimir Saternos.
 
@@ -7,10 +7,11 @@ This project is originally from the article posted on https://www.oracle.com/tec
 
 Reads an Excel Spread sheet (file name passed in as an argument).  
 
-Creates a comma delimitted (.csv) file for each sheet.
+1. Creates a comma delimitted (.csv) file for each sheet.
 
-Creates a SQL script to creates external tables in a Oracle Database (9i or above) 
-that reference the .csv files on the file system.
+2. Creates a SQL script to create tables.
+* For an Oracle database use external table definitions that reference the .csv files on the file system.
+* For an PostgresQL database use table definitions and add a load.sql script that loads the CSV file into the table.
 
 # Enhancements
 
@@ -25,3 +26,4 @@ I have made the following enhancements:
 * The CSV output file also contains the header, so it is just a copy of the worksheet. The external table skips that row by using "FIELD NAMES ALL FILES IGNORE".
 * The external table definition uses double quoted identifiers ("This is my column") instead of (This is my column) in order to suppress DDL errors.
 * The external table does not create a log file since that grows and grows...
+* The column names are derived from the header or will be A, B, ... if no header is specified.
