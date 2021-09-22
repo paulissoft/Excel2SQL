@@ -282,10 +282,10 @@ public class TableGenerator {
             Sheet sheet = wb.getSheetAt(i);
 
             if (!wb.getSheetName(i).matches(sheetNameExpression)) {
-                info("Skipping sheet " + i + ": " + wb.getSheetName(i) + " since it does not match " + sheetNameExpression);
+                info("Skipping sheet " + i + " (" + wb.getSheetName(i) + ") since it does not match \"" + sheetNameExpression + "\"");
                 continue;
             } else {
-                info("Processing sheet " + i + ": " + wb.getSheetName(i));
+                info("Processing sheet " + i + " (" + wb.getSheetName(i) + ")");
             }
                 
             Table table = null;
@@ -363,7 +363,7 @@ public class TableGenerator {
 
             if (value.endsWith("%")) {
                 // replace the percent symbol and divide by 100
-                value = (new Double(Double.valueOf(value.replace("%", "")) / 100)).toString();
+                value = Double.valueOf(Double.valueOf(value.replace("%", "")) / 100).toString();
             }
 
             String[] parts = value.split("\\.");
@@ -444,7 +444,7 @@ public class TableGenerator {
 
         // Row names = sheet.getRow(COLUMN_NAME_ROW);
 
-        String csv = "";
+        ArrayList<ArrayList<String>> csvRows = new ArrayList<ArrayList<String>>();
         String progress = null;
 
         Iterator<Row> rowIterator = sheet.rowIterator();
@@ -472,7 +472,7 @@ public class TableGenerator {
             Row row = rowIterator.next();
             Iterator<Cell> cellIterator = row.cellIterator();
             boolean rowEmpty = true;
-            String csvRow = "";
+            ArrayList<String> csvRow = new ArrayList<String>();
 
             debug("row number          : " + row.getRowNum());
             debug("first cell number   : " + row.getFirstCellNum());
@@ -495,7 +495,7 @@ public class TableGenerator {
                         if (this.noHeader || r == COLUMN_NAME_ROW) {
                             break; // no header column to add
                         } else {
-                            csvRow += table.getFieldSeparator();
+                            csvRow.add(null);
                             continue;
                         }
                     }
@@ -511,7 +511,7 @@ public class TableGenerator {
                     }
                                         
                     String value = null;
-                    String missingColumns = "";
+                    ArrayList<String> missingColumns = new ArrayList<String>();
 
                     if (this.noHeader) {
                         // a data row when there is no header: add missing columns
@@ -524,7 +524,7 @@ public class TableGenerator {
                                 col.setName(number2excelColumnName(c+1));
                                 table.addColumn(col);
                             }
-                            missingColumns += table.getFieldSeparator();
+                            missingColumns.add(null);
                         }
                         assert(c == cell.getColumnIndex());
                         
@@ -540,7 +540,7 @@ public class TableGenerator {
                     } else if (r != COLUMN_NAME_ROW) {
                         // a data row when there is a header: add missing columns
                         for ( ; c < Math.min(table.getNrColumns()-1, cell.getColumnIndex()); c++ ) {
-                            missingColumns += table.getFieldSeparator();
+                            missingColumns.add(null);
                         }
                         assert(c == cell.getColumnIndex() || c == table.getNrColumns()-1);
                     } else {
@@ -621,7 +621,8 @@ public class TableGenerator {
                     if (value.contains(table.getEnclosureString()) || value.contains(table.getFieldSeparator())) {
                         value = table.getEnclosureString() + value + table.getEnclosureString();
                     }
-                    csvRow += missingColumns + value + table.getFieldSeparator();
+                    csvRow.addAll(missingColumns);
+                    csvRow.add(value);
                 } catch (Exception e) {
                     System.err.println("Error in line " + (r+1) + " for column " + (c+1));
                     throw e;
@@ -629,9 +630,10 @@ public class TableGenerator {
             }
             if (!isEmptyRow(csvRow)) {
                 if (this.addMetadata) {
-                    csv += sheet.getSheetName() + table.getFieldSeparator() + (row.getRowNum()+1) + table.getFieldSeparator();
+                    csvRow.add(0, sheet.getSheetName());
+                    csvRow.add(1, String.valueOf(row.getRowNum()+1));
                 }
-                csv += csvRow + newline;
+                csvRows.add(csvRow);
             } else {
                 debug("Skipping row " + (r+1) + " since it is empty");
             }
@@ -661,9 +663,34 @@ public class TableGenerator {
             table.addColumnFirst(col);            
         }
 
-        if (csv.length() > 0) {
-            // Final newline causes problems so remove it
-            write(csv.substring(0, csv.length()-1), table.getLocation(), this.encoding, this.writeBOM, !firstWorkbook);
+        if (csvRows.size() > 0) {
+            String csv = "";
+            
+            for (int r = 0; r < csvRows.size(); r++) {
+                final ArrayList<String> row = csvRows.get(r);
+
+                if (r > 0) {
+                    csv += newline; // always a new line except for the last line
+                }
+
+                // add empty columns at the end if this row has less columns than the table column count
+                assert(row.size() <= table.getNrColumns());
+                
+                for (int c = 0; c < Math.max(row.size(), table.getNrColumns()); c++) {
+                    final String col = (c < row.size() ? row.get(c) : null);
+
+                    // only a separator between columns not after the last one
+                    if (c > 0) {
+                        csv += table.getFieldSeparator();
+                    }
+                    
+                    if (col != null) {
+                        csv += col;
+                    }
+                }
+            }
+
+            write(csv, table.getLocation(), this.encoding, this.writeBOM, !firstWorkbook);
 
             return true;
         } else {
@@ -694,8 +721,16 @@ public class TableGenerator {
         return excelColumnName;
     }
 
-    private boolean isEmptyRow(String row) {
-        return row.replace(this.columnSeparator, "").length() == 0;
+    private boolean isEmptyRow(ArrayList<String> row) {
+        for (int c = 0; c < row.size(); c++) {
+            final String col = row.get(c);
+            
+            if (col != null && col.length() > 0) {
+                debug("column " + c + " (" + col + ") is not empty");
+                return false;
+            }
+        }
+        return true;
     }
 
     public static class ValidSqlDatabases implements IParameterValidator {
