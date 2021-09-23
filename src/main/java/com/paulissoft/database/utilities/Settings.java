@@ -29,7 +29,7 @@ class Settings {
     @Parameter(names = "--sheet-name-expression", description = "Sheet name(s) must match this regular expression")
     protected String sheetNameExpression = ".*";
 
-    @Parameter(names = "--sql-table-name", description = "A list of SQL table name(s) to use instead of the sheet name(s)")
+    @Parameter(names = "--sql-table-names", description = "A list of SQL table name(s) to use instead of the sheet name(s)")
     protected List<String> tableNames = new ArrayList<>();
 
     @Parameter(names = "--column-separator", description = "The column separator")
@@ -63,10 +63,10 @@ class Settings {
     protected boolean help;
     
     /**
-     * The Excel Spreadsheets (.xls or .xlsx) that are being accessed
+     * The Excel Spreadsheet (.xls or .xlsx) that is being accessed
      */
-    @Parameter(description = "spreadsheet...", required = true)
-    protected List<String> spreadsheets = new ArrayList<String>();
+    @Parameter(description = "spreadsheet", required = true)
+    protected String spreadsheet = null;
 
     public static class ValidSqlDatabases implements IParameterValidator {
         @Override

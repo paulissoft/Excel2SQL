@@ -22,7 +22,7 @@ $ java -jar <path to>/Excel2SQL-<version>.jar --help
 gives:
 
 ```
-Usage: TableGenerator [options] spreadsheet...
+Usage: TableGenerator [options] spreadsheet
   Options:
     --add-metadata
       Add metadata like sheet name and row number (starting from 1) in the 
@@ -54,7 +54,7 @@ Usage: TableGenerator [options] spreadsheet...
     --sql-database
       The SQL database (Oracle, PostgresQL)
       Default: Oracle
-    --sql-table-name
+    --sql-table-names
       A list of SQL table name(s) to use instead of the sheet name(s)
       Default: []
     --verbose
@@ -67,7 +67,7 @@ Usage: TableGenerator [options] spreadsheet...
 
 # Algorithm
 
-There is just one workbook. Previous versions allowed more than one workbook but that got too difficult to maintain.
+There is just one spreadsheet to process (workbook). Previous versions allowed more than one workbook but that got too difficult to maintain.
 
 ## Per worksheet
 
@@ -79,7 +79,7 @@ In Java a sparse array is implemented by a HashMap.
 
 Now:
 1. If a cell is part of a header row add the header name (cell contents) to the previous contents of the corresponding header array element (with a space as separator), if any.
-2. Else:
+2. Else if it is a data row (after the header row(s)):
    - If there is no header and the cell is beyond the largest sheet column found till now, add the corresponding column name (A, B, ...) as the header name to the (sparse) header array and the cell itself to the (sparse) data array.
    - Else, it is just a data cell so add it to the (sparse) data array.
 

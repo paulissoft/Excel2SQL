@@ -3,19 +3,23 @@ package com.paulissoft.database.utilities;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.InputStream;
-import java.io.PrintStream;
 import java.io.FileWriter;
-import java.nio.charset.StandardCharsets;
-import java.io.Writer;
+import java.io.InputStream;
 import java.io.OutputStreamWriter;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Date;
-import java.util.Arrays;
+import java.io.PrintStream;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
+import java.util.TreeSet;
+import java.util.SortedSet;
 
 import org.apache.poi.hssf.usermodel.HSSFFormulaEvaluator;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
@@ -42,12 +46,9 @@ import com.beust.jcommander.JCommander;
  * @author Casimir Saternos
  * @version 1.0
  * 
- *         This program is run at the command line. Given one or more excel
- *         spreadsheets, a script is generated to create the table(s)
- *         that references the data from the spreadsheets. 
- *
- *         When multiple spreadsheets are supplied, 
- *         they must all have the same number and names of sheets.
+ *         This program is run at the command line. Given one 
+ *         spreadsheet, a script is generated to create the table(s)
+ *         that references the data from the spreadsheet. 
  */
 public class TableGenerator {
 
@@ -85,15 +86,13 @@ public class TableGenerator {
                 jc.usage();
             } else {
                 // Check file exists as a regular file
-                for (int i = 0; i < settings.spreadsheets.size(); i++) {
-                    File f = new File(settings.spreadsheets.get(i));
+                File f = new File(settings.spreadsheet);
 
-                    try {
-                        assert(f.exists() && !f.isDirectory());
-                    } catch(AssertionError e) {
-                        System.err.println("File '" + settings.spreadsheets.get(i) + "' does not exist or is not a regular file");
-                        throw e;
-                    }
+                try {
+                    assert(f.exists() && !f.isDirectory());
+                } catch(AssertionError e) {
+                    System.err.println("File '" + settings.spreadsheet + "' does not exist or is not a regular file");
+                    throw e;
                 }
             }
         } catch(Exception e) {
@@ -114,8 +113,9 @@ public class TableGenerator {
     // private List<TableColumn> tables;
     private List<Table> tables;
 
+    private PrintStream tablesSql = null;
 
-    private String ddlString = "";
+    private PrintStream loadSql = null;
   
     public TableGenerator() {
         this.tables = new ArrayList<Table>();
@@ -129,90 +129,99 @@ public class TableGenerator {
 
         info("Using working directory " + new File(Settings.PWD).getAbsolutePath());
 
-        ddlString = preamble();
+        tablesSql = open("tables.sql", "UTF-8", false, false);
 
-        for (int i = 0; i < settings.spreadsheets.size(); i++) {
-            final String spreadsheet = (new File(settings.spreadsheets.get(i))).getAbsolutePath();
-            final boolean firstWorkbook = i == 0;
+        if (settings.sqlDatabase.equals(Settings.POSTGRESQL)) {
+            loadSql = open("load.sql", "UTF-8", false, false);
+        }
+
+        tablesSql.print(Table.preamble(settings));
+
+        final String spreadsheet = (new File(settings.spreadsheet)).getAbsolutePath();
             
-            if (settings.oneTable && firstWorkbook) {
-                Table table = new Table("tables", settings);            
-                tables.add(table);
+        if (settings.oneTable) {
+            Table table = new Table("tables", settings);            
+            tables.add(table);
+        }
+        
+        try {
+            Workbook wb;
+            
+            try {
+                POIFSFileSystem fs = new POIFSFileSystem(new FileInputStream(spreadsheet));
+                wb = new HSSFWorkbook(fs);
+            } catch (OfficeXmlFileException e) {
+                wb = new XSSFWorkbook(new FileInputStream(spreadsheet));
             }
 
-            try {
-                Workbook wb;
-            
-                try {
-                    POIFSFileSystem fs = new POIFSFileSystem(new FileInputStream(spreadsheet));
-                    wb = new HSSFWorkbook(fs);
-                } catch (OfficeXmlFileException e) {
-                    wb = new XSSFWorkbook(new FileInputStream(spreadsheet));
-                }
-
-                formulaEvaluator = wb.getCreationHelper().createFormulaEvaluator();
+            formulaEvaluator = wb.getCreationHelper().createFormulaEvaluator();
                 
-                formulaEvaluator.setIgnoreMissingWorkbooks(true);
+            formulaEvaluator.setIgnoreMissingWorkbooks(true);
                 
-                for (Sheet sheet : wb) {
-                    for (Row r : sheet) {
-                        for (Cell c : r) {
-                            switch(c.getCellType()) {
-                            case FORMULA:
-                                formulaEvaluator.evaluateFormulaCell(c);
-                                break;
-                                    
-                            default:
-                                break;
-                            }
+            for (Sheet sheet : wb) {
+                for (Row r : sheet) {
+                    for (Cell c : r) {
+                        switch(c.getCellType()) {
+                        case FORMULA:
+                            formulaEvaluator.evaluateFormulaCell(c);
+                            break;
+                            
+                        default:
+                            break;
                         }
                     }
                 }
-                
-                info("Processing workbook " + spreadsheet);
-
-                processWorkbook(wb, firstWorkbook, i == settings.spreadsheets.size() - 1);
-            } catch (Exception e) {
-                e.printStackTrace();
-                
-                throw e;
             }
+                
+            info("Processing workbook " + spreadsheet);
+
+            processWorkbook(wb);
+        } catch (Exception e) {
+            e.printStackTrace();
+            
+            throw e;
         }
 
         if (settings.oneTable) {
-            ddlString += tables.get(0).getDdl();
+            tablesSql.print(tables.get(0).getDdl());
         }
 
-        write(ddlString, "tables.sql", "UTF-8", false, false);
-            
+        tablesSql.close();
+
+        if (loadSql != null) {
+            loadSql.close();
+        }
+        
         info("Processing complete.");
     }
 
     /**
+     * Prcess a worksheet.
+     *
      * @param sheet
      * @param table
-     * @param firstWorkbook  First workbook
-     * @param lastWorkbook   Last workbook
      */
-    private void processSheet(Sheet sheet, Table table, boolean firstWorkbook, boolean lastWorkbook) throws java.io.IOException {
+    private void processSheet(Sheet sheet, Table table) throws java.io.IOException {
         //Write out a .csv file based upon the sheet
-        if (writeCsv(sheet, table, firstWorkbook, lastWorkbook) && lastWorkbook && !settings.oneTable) {
+        if (writeCsv(sheet, table) && !settings.oneTable) {
             // Add the ddl for the table to the script
-            ddlString += table.getDdl();
+            tablesSql.print(table.getDdl());
+            if (loadSql != null) {
+                loadSql.print("\\copy " + table.getName() + "(");
+                for (int c = 0; c < table.getNrColumns(); c++) {
+                    loadSql.print((c > 0 ? ", " : "") + table.getColumn(c).getName());
+                }
+                loadSql.print(") from '" + table.getLocation() + "' with ( format CSV );" + Settings.NL);
+            }
         }
     }
 
     /**
+     * Iterate through each sheet in the workbook and process it.
+     *
      * @param wb
-     * Iterate through each sheet in the workbook
-     * and process it
      */
-    private void processWorkbook(Workbook wb, boolean firstWorkbook, boolean lastWorkbook) throws java.io.IOException {
-
-        //if (!firstWorkbook && !(tables.size() == wb.getNumberOfSheets())) {
-        //    throw new RuntimeException("External tables size (" + tables.size() + ") should be equal to the number of sheets (" + wb.getNumberOfSheets() + ")");
-        //}
-
+    private void processWorkbook(Workbook wb) throws java.io.IOException {
         for (int i = 0; i < wb.getNumberOfSheets(); i++) {
             Sheet sheet = wb.getSheetAt(i);
 
@@ -230,31 +239,13 @@ public class TableGenerator {
             } else {
                 final String tableName = ( i < settings.tableNames.size() ? settings.tableNames.get(i) : wb.getSheetName(i) );
 
-                if (firstWorkbook) {
-                    table = new Table(tableName, settings);
-                    tables.add(table);
-                } else {
-                    final String sqlTableName = Table.getName(tableName);
-
-                    for (int index = 0; index < tables.size(); index++) {
-                        if (tables.get(index).getName().equals(sqlTableName)) {
-                            table = tables.get(index);
-                            break;
-                        }
-                    }
-                
-                    if (table == null) {
-                        throw new RuntimeException("Could not find table name (" + sqlTableName + ")");
-                    }
-                }
+                table = new Table(tableName, settings);
+                tables.add(table);
             }
-
             
-            processSheet(sheet, table, firstWorkbook, lastWorkbook);
+            processSheet(sheet, table);
 
-            if (lastWorkbook) {      
-                info("Table "+ table.getName() + " processed." );
-            }
+            info("Table "+ table.getName() + " processed." );
         }        
     }
 
@@ -334,22 +325,16 @@ public class TableGenerator {
     }
 
     /**
-     * @param content
+     * Open a file on the file system.
+     *
      * @param filename
      * @param encoding
      * @param writeBOM
      * @param append
-     *
-     * Write the given String content to the file system
-     * using the String filename specified
      */
-    private void write(String content, String filename, String encoding, boolean writeBOM, boolean append) throws java.io.IOException {
+    private PrintStream open(String filename, String encoding, boolean writeBOM, boolean append) throws java.io.IOException {
 
         try {
-            // GJP 2019-10-18  Seems not necessary.
-            // File f = new File(filename);
-            // f.createNewFile();
-
             PrintStream out = new PrintStream(new FileOutputStream(filename, append), false, encoding);
 
             // write the BOM?
@@ -357,6 +342,28 @@ public class TableGenerator {
                 byte[] bom = {(byte)0xEF, (byte)0xBB, (byte)0xBF};
                 out.write(bom);
             }
+
+            return out;
+        } catch (Exception e) {
+            e.printStackTrace();
+            
+            throw e;
+        }
+    }
+
+    /**
+     * Write the given String content to the file system
+     * using the String filename specified.
+     *
+     * @param content
+     * @param filename
+     * @param encoding
+     * @param writeBOM
+     * @param append
+     */
+    private void write(String content, String filename, String encoding, boolean writeBOM, boolean append) throws java.io.IOException {
+        try {
+            PrintStream out = open(filename, encoding, writeBOM, append);
 
             out.print(content);
             out.close();
@@ -370,29 +377,39 @@ public class TableGenerator {
     }
 
     /**
+     * Parse and write the CSV file.
+     * 
      * @param sheet
      * @param table
-     * @param firstWorkbook  First workbook
-     * @param lastWorkbook   Last workbook
      */
-    private Boolean writeCsv(Sheet sheet, Table table, boolean firstWorkbook, boolean lastWorkbook) throws java.io.IOException {
+    private Boolean writeCsv(Sheet sheet, Table table) throws java.io.IOException {
 
-        ArrayList<ArrayList<String>> csvRows = new ArrayList<ArrayList<String>>();
+        ArrayList<HashMap<Integer,String>> dataRows = new ArrayList<HashMap<Integer,String>>();
+        HashMap<Integer,String> headerRow = new HashMap<Integer,String>();
         String progress = null;
 
         Iterator<Row> rowIterator = sheet.rowIterator();
             
-        for (int r = 0; rowIterator.hasNext(); r++) {
+        while (rowIterator.hasNext()) {
+            final Row row = rowIterator.next();
+            Iterator<Cell> cellIterator = row.cellIterator();
+            HashMap<Integer,String> dataRow = new HashMap<Integer,String>();
+
+            debug("row number          : " + row.getRowNum());
+            debug("first cell number   : " + row.getFirstCellNum());
+            debug("last cell number + 1: " + row.getLastCellNum());
+
             final boolean hasHeader = settings.headerRowFrom > 0;
-            final boolean isHeaderRow = hasHeader && r >= settings.headerRowFrom - 1 && r <= settings.headerRowTill - 1;
-            final boolean isDataRow = !hasHeader || r > settings.headerRowTill - 1;
+            final boolean isHeaderRow = hasHeader && row.getRowNum() >= settings.headerRowFrom - 1 && row.getRowNum() <= settings.headerRowTill - 1;
+            final boolean isDataRow = !hasHeader || row.getRowNum() > settings.headerRowTill - 1;
+            final boolean firstDataRowAfterHeader = hasHeader && row.getRowNum() == (settings.headerRowTill - 1) + 1;
             
-            debug("Processing Excel row " + (r+1));
+            debug("Processing Excel row " + (row.getRowNum() + 1));
             
-            switch (r % 10)
+            switch (row.getRowNum() % 10)
                 {
                 case 0:
-                    progress = "Processing row " + (r+1);
+                    progress = "Processing row " + (row.getRowNum() + 1);
                     break;
                     
                 case 9:
@@ -405,177 +422,154 @@ public class TableGenerator {
                     progress += ".";
                 }
 
-            Row row = rowIterator.next();
-            Iterator<Cell> cellIterator = row.cellIterator();
-            boolean rowEmpty = true;
-            ArrayList<String> csvRow = new ArrayList<String>();
-
-            debug("row number          : " + row.getRowNum());
-            debug("first cell number   : " + row.getFirstCellNum());
-            debug("last cell number + 1: " + row.getLastCellNum());
-
-            // process column if
-            // 1) there is no header (we may always add column names) OR
-            // 2) this is a header row OR
-            // 3) the column is part of the columns found
-            for (short c = 0; (!hasHeader || isHeaderRow || c < table.getNrColumns()); c++) {
-                debug("Processing Excel column " + (c+1));
+            while (cellIterator.hasNext()) {
+                final Cell cell = cellIterator.next();
+                
+                debug("Processing Excel column " + (cell.getColumnIndex() + 1));
                 debug("Number of table columns: " + table.getNrColumns());
-                            
-                try {                
-                    Cell cell = cellIterator.hasNext() ? cellIterator.next() : null;
-                    
-                    if (cell == null) {
-                        debug("No cell defined");
+                debug("cell address: " + cell.getAddress() + "; cell column index: " + cell.getColumnIndex());
 
-                        break; // empty cells will be added later on
-                        /*
-                        if (!hasHeader || isHeaderRow) {
-                            break; // no header column to add
-                        } else {
-                            csvRow.add(null);
-                            continue;
-                        }
-                        */
+                /*
+                 * 1. If a cell is part of a header row add the header name (cell contents) to the previous contents of the corresponding header array element (with a space as separator), if any.
+                 * 2. Else:
+                 *    a) If there is no header and the cell is beyond the largest sheet column found till now, add the corresponding column name (A, B, ...) as the header name to the (sparse) header array and the cell itself to the (sparse) data array.
+                 *    b) Else, it is just a data cell so add it to the (sparse) data array.
+                 *
+                 * Every time a data cell is processed, the header name (via the column index) will be used to:
+                 * - either add the header name as a table column OR
+                 * - retrieve the column with that name
+                 *
+                 * Now the cell value will be used to update the table column data type.
+                 *
+                 * At the end of a data row, print the values to a CSV file (&lt;sheet&gt;.csv) taking care of the holes in the sparse data array.
+                 *
+                 */
+                
+                // Sometimes there may be cells missing so after cell column index 0 may come cell column index 2.
+                // But not for the header!
+                if (isHeaderRow) {
+                    // See note 1 above.
+                    String header = headerRow.get(cell.getColumnIndex());
+                    String value;
+
+                    // Some names are just numbers, strangely enough (column name 14)
+                    try {
+                        value = cell.getRichStringCellValue().getString();
+                        // string?
+                    } catch (IllegalStateException e1) {
+                        // java.lang.IllegalStateException: Cannot get a STRING value from a NUMERIC cell
+                        value = dataFormatter.formatCellValue(cell);
                     }
 
-                    assert(cell != null);
-                    
-                    debug("cell address: " + cell.getAddress() + "; cell column index: " + cell.getColumnIndex());
-
-                    // Sometimes there may be cells missing so after cell column index 0 may come cell column index 2.
-                    // But not for the header!
-                    if (isHeaderRow && !(c == cell.getColumnIndex())) {
-                        throw new RuntimeException("There should be no columns missing for the header");
+                    if (header != null) {
+                        header += " " + value;
+                    } else {
+                        header = value;
                     }
-                                        
-                    String value = null;
-                    ArrayList<String> missingColumns = new ArrayList<String>();
 
-                    if (!(isHeaderRow || isDataRow)) {
-                        break; // not a header nor data: stop
-                    } else if (!hasHeader) {
-                        // a data row when there is no header: add missing columns
-                        for ( ; c < cell.getColumnIndex(); c++ ) {
-                            // add this column as a header column?
-                            if (c >= table.getNrColumns()) {
-                                TableColumn col = new TableColumn(settings);
+                    headerRow.put(cell.getColumnIndex(), header); // add or replace header
+                } else if (isDataRow) {
+                    if (firstDataRowAfterHeader) {
+                        // add table columns sorted on key
+                        final SortedSet<Integer> keys = new TreeSet<Integer>(headerRow.keySet());
+                        int lastKey = -1;
+                        
+                        for (Integer key : keys) {
+                            final TableColumn col = new TableColumn(settings);                            
+                            final String header = headerRow.get(key);
 
-                                debug("adding column " + (c+1) + " as header (1)");
-                                col.setName(number2excelColumnName(c+1));
+                            // missing headers get the Excel column A, B, ...
+                            while (++lastKey < key) {
+                                debug("adding column " + (lastKey + 1) + " as header (1)");
+                                col.setName(number2excelColumnName(lastKey));
                                 table.addColumn(col);
                             }
-                            missingColumns.add(null);
-                        }
-                        assert(c == cell.getColumnIndex());
-                        
-                        // add this column as a header column?
-                        if (c >= table.getNrColumns()) {
-                            TableColumn col = new TableColumn(settings);
-
-                            debug("adding column " + (c+1) + " as header (2)");
-                            col.setName(number2excelColumnName(c+1));
+                            
+                            debug("adding column " + (cell.getColumnIndex() + 1) + " as header (1)");
+                            col.setName(header);
                             table.addColumn(col);
-                        }                        
-                    } else if (!isHeaderRow && isDataRow) {
-                        // a data row when there is a header: add missing columns
-                        for ( ; c < Math.min(table.getNrColumns()-1, cell.getColumnIndex()); c++ ) {
-                            missingColumns.add(null);
                         }
-                        assert(c == cell.getColumnIndex() || c == table.getNrColumns()-1);
-                    } else {
-                        assert(c == cell.getColumnIndex());
+                    } else if (!hasHeader && (headerRow.isEmpty() || cell.getColumnIndex() > Collections.max(headerRow.keySet()))) {
+                        // See note 2a (first part) above.
+                        final Integer lastKey = (headerRow.isEmpty() ? -1 : Collections.max(headerRow.keySet()));
+                        final TableColumn col = new TableColumn(settings);                            
+                        final String header = number2excelColumnName(cell.getColumnIndex());
+
+                        for (Integer key = lastKey + 1; key <= cell.getColumnIndex(); key++) {
+                            debug("adding column " + (key + 1) + " as header (2a)");
+                            headerRow.put(key, header); // add or replace header
+                            col.setName(header);
+                            table.addColumn(col);
+                        }
+                        assert(cell.getColumnIndex() == Collections.max(headerRow.keySet()));
                     }
 
-                    if (c != cell.getColumnIndex()) {
-                        // the cell is beyond the number of heading cells
-                        value = "";
-                    } else {
-                        debug("Processing Excel column " + (c+1));
-                        
-                        // new column if 
-                        TableColumn col = (isHeaderRow && firstWorkbook ? new TableColumn(settings) : table.getColumn(c));
+                    // Note 2a (second part) and 2b.
+                    assert(cell.getColumnIndex() < table.getNrColumns());
+                           
+                    // Add the value to the sparse data array.
+                    final TableColumn col = table.getColumn(cell.getColumnIndex());
+                    String value;
 
-                        if (isHeaderRow) {
-                            // Some names are just numbers, strangely enough (column name 14)
+                    // column type can switch from string to numeric but not vice versa
+                    switch(cell.getCellType())
+                        {
+                        case FORMULA:
+                            // try in this order: numbers, strings (a boolean is a string in the database) and booleans
                             try {
-                                // value = cell.getStringCellValue();
-                                value = cell.getRichStringCellValue().getString();
-                                // string?
+                                value = getNumericValue(cell, col);
                             } catch (IllegalStateException e1) {
-                                // java.lang.IllegalStateException: Cannot get a STRING value from a NUMERIC cell
-                                value = dataFormatter.formatCellValue(cell);
-                            }
-                            
-                            info((firstWorkbook ? "Scanning" : "Skipping") + " heading " + (c+1) + ": " + value);
-
-                            if (firstWorkbook) {
-                                col.setName(value);
-                                table.addColumn(col);
-                            } else {
-                                if (!col.getName().equals(Table.getName(value))) {
-                                    throw new RuntimeException("Column name (" + col.getName() + ") should be equal to the table name (" + Table.getName(value) + ")"); // check column name
-                                }
-                            }
-                        } else {
-                            // column type can switch from string to numeric but not vice versa
-                            switch(cell.getCellType())
-                                {
-                                case FORMULA:
-                                    // try in this order: numbers, strings (a boolean is a string in the database) and booleans
-                                    try {
-                                        value = getNumericValue(cell, col);
-                                    } catch (IllegalStateException e1) {
-                                        try {
-                                            value = getStringValue(cell, col);
-                                        } catch (IllegalStateException e2) {
-                                            value = getBooleanValue(cell, col);
-                                        }
-                                    }
-                                    break;
-
-                                case BLANK:
-                                case STRING:
+                                try {
                                     value = getStringValue(cell, col);
-                                    break;
-                                    
-                                case BOOLEAN:
+                                } catch (IllegalStateException e2) {
                                     value = getBooleanValue(cell, col);
-                                    break;
-
-                                case NUMERIC:
-                                    value = getNumericValue(cell, col);
-                                    break;
-
-                                default:
-                                    throw new RuntimeException("Cell Type of cell " + col.getName() + " unknown: " + cell.getCellType()); 
                                 }
-                        }
-                    }
+                            }
+                            break;
 
-                    // The Column Name row is only printed the first time else it is used for verification
-                    if (isHeaderRow && !firstWorkbook) continue;
+                        case BLANK:
+                        case STRING:
+                            value = getStringValue(cell, col);
+                            break;
+                            
+                        case BOOLEAN:
+                            value = getBooleanValue(cell, col);
+                            break;
+                            
+                        case NUMERIC:
+                            value = getNumericValue(cell, col);
+                            break;
+                            
+                        default:
+                            throw new RuntimeException("Cell Type of cell " + col.getName() + " unknown: " + cell.getCellType()); 
+                        }
 
                     // see https://en.wikipedia.org/wiki/Comma-separated_values
                     value.replace(table.getEnclosureString(), table.getEnclosureString() + table.getEnclosureString());
                     if (value.contains(table.getEnclosureString()) || value.contains(table.getFieldSeparator())) {
                         value = table.getEnclosureString() + value + table.getEnclosureString();
                     }
-                    csvRow.addAll(missingColumns);
-                    csvRow.add(value);
-                } catch (Exception e) {
-                    System.err.println("Error in line " + (r+1) + " for column " + (c+1));
-                    throw e;
+                    dataRow.put(cell.getColumnIndex(), value);
                 }
-            }
-            if (!isEmptyRow(csvRow)) {
+            } // while (cellIterator.hasNext()) {
+            
+            if (!isEmptyRow(dataRow)) {
                 if (settings.addMetadata) {
-                    csvRow.add(0, sheet.getSheetName());
-                    csvRow.add(1, String.valueOf(row.getRowNum()+1));
+                    // add two column atthe beginning so move the columns two up
+                    HashMap<Integer,String> newDataRow = new HashMap<Integer,String>();
+                    
+                    newDataRow.put(0, sheet.getSheetName());
+                    newDataRow.put(1, String.valueOf(row.getRowNum() + 1));
+
+                    for (Integer key : dataRow.keySet()) {
+                        newDataRow.put(key + 2, dataRow.get(key));                        
+                    }
+                    
+                    dataRow = newDataRow;
                 }
-                csvRows.add(csvRow);
+                dataRows.add(dataRow);
             } else {
-                debug("Skipping row " + (r+1) + " since it is empty");
+                debug("Skipping row " + (row.getRowNum() + 1) + " since it is empty");
             }
         }
         
@@ -603,34 +597,41 @@ public class TableGenerator {
             table.addColumnFirst(col);            
         }
 
-        if (csvRows.size() > 0) {
+        if (dataRows.size() > 0) {
             String csv = "";
             
-            for (int r = 0; r < csvRows.size(); r++) {
-                final ArrayList<String> row = csvRows.get(r);
+            for (int r = 0; r < dataRows.size(); r++) {
+                final HashMap<Integer,String> row = dataRows.get(r);
 
                 if (r > 0) {
                     csv += Settings.NL; // always a new line except for the last line
                 }
 
-                // add empty columns at the end if this row has less columns than the table column count
-                assert(row.size() <= table.getNrColumns());
-                
-                for (int c = 0; c < Math.max(row.size(), table.getNrColumns()); c++) {
-                    final String col = (c < row.size() ? row.get(c) : null);
+                final SortedSet<Integer> keys = new TreeSet<Integer>(row.keySet());
 
-                    // only a separator between columns not after the last one
-                    if (c > 0) {
+                int lastKey = -1;
+                
+                for (Integer key : keys) {
+                    final String col = row.get(key);
+
+                    // missing columns get a field separator
+                    while (++lastKey < key) {
                         csv += table.getFieldSeparator();
                     }
-                    
-                    if (col != null) {
-                        csv += col;
+
+                    if (key > 0) {
+                        csv += table.getFieldSeparator();
                     }
+
+                    csv += col;
+                }
+
+                while (++lastKey < table.getNrColumns()) {
+                    csv += table.getFieldSeparator();
                 }
             }
 
-            write(csv, table.getLocation(), settings.encoding, settings.writeBOM, !firstWorkbook);
+            write(csv, table.getLocation(), settings.encoding, settings.writeBOM, false);
 
             return true;
         } else {
@@ -638,10 +639,12 @@ public class TableGenerator {
             
             return false;
         }
-    }
+    } // writeCsv
 
     // columnIndex starting from 1
     private String number2excelColumnName(int columnIndex) {
+        columnIndex++;
+        
         assert(columnIndex > 0);
         
         String excelColumnName = "";
@@ -661,8 +664,8 @@ public class TableGenerator {
         return excelColumnName;
     }
 
-    private boolean isEmptyRow(ArrayList<String> row) {
-        for (int c = 0; c < row.size(); c++) {
+    private boolean isEmptyRow(HashMap<Integer,String> row) {
+        for (Integer c : row.keySet()) {
             final String col = row.get(c);
             
             if (col != null && col.length() > 0) {
@@ -671,13 +674,5 @@ public class TableGenerator {
             }
         }
         return true;
-    }
-
-    private String preamble() {
-        if (settings.sqlDatabase.equals(Settings.ORACLE)) {
-            return "CREATE /*OR REPLACE*/ DIRECTORY load_dir AS '" + Settings.PWD + "'" + Settings.NL + ";" + Settings.NL + Settings.NL;
-        } else {
-            return "";
-        }
     }
 }

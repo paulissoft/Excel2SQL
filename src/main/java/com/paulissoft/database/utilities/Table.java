@@ -310,4 +310,12 @@ public class Table {
     public String getEncoding() {
         return this.settings.encoding;
     }
+
+    static protected String preamble(Settings settings) {
+        if (settings.sqlDatabase.equals(Settings.ORACLE)) {
+            return "CREATE /*OR REPLACE*/ DIRECTORY load_dir AS '" + Settings.PWD + "'" + Settings.NL + ";" + Settings.NL + Settings.NL;
+        } else {
+            return "";
+        }
+    }
 }
