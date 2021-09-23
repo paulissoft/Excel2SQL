@@ -383,8 +383,9 @@ public class TableGenerator {
         Iterator<Row> rowIterator = sheet.rowIterator();
             
         for (int r = 0; rowIterator.hasNext(); r++) {
-            final boolean noHeader = settings.headerRowFrom == 0;
-            final boolean isHeaderRow = !noHeader && (r >= settings.headerRowFrom - 1 && r <= settings.headerRowTill - 1);
+            final boolean hasHeader = settings.headerRowFrom > 0;
+            final boolean isHeaderRow = hasHeader && r >= settings.headerRowFrom - 1 && r <= settings.headerRowTill - 1;
+            final boolean isDataRow = !hasHeader || r > settings.headerRowTill - 1;
             
             debug("Processing Excel row " + (r+1));
             
@@ -415,9 +416,9 @@ public class TableGenerator {
 
             // process column if
             // 1) there is no header (we may always add column names) OR
-            // 2) this is the column name row OR
+            // 2) this is a header row OR
             // 3) the column is part of the columns found
-            for (short c = 0; (noHeader || isHeaderRow || c < table.getNrColumns()); c++) {
+            for (short c = 0; (!hasHeader || isHeaderRow || c < table.getNrColumns()); c++) {
                 debug("Processing Excel column " + (c+1));
                 debug("Number of table columns: " + table.getNrColumns());
                             
@@ -427,12 +428,15 @@ public class TableGenerator {
                     if (cell == null) {
                         debug("No cell defined");
 
-                        if (noHeader || isHeaderRow) {
+                        break; // empty cells will be added later on
+                        /*
+                        if (!hasHeader || isHeaderRow) {
                             break; // no header column to add
                         } else {
                             csvRow.add(null);
                             continue;
                         }
+                        */
                     }
 
                     assert(cell != null);
@@ -448,7 +452,9 @@ public class TableGenerator {
                     String value = null;
                     ArrayList<String> missingColumns = new ArrayList<String>();
 
-                    if (noHeader) {
+                    if (!(isHeaderRow || isDataRow)) {
+                        break; // not a header nor data: stop
+                    } else if (!hasHeader) {
                         // a data row when there is no header: add missing columns
                         for ( ; c < cell.getColumnIndex(); c++ ) {
                             // add this column as a header column?
@@ -470,9 +476,8 @@ public class TableGenerator {
                             debug("adding column " + (c+1) + " as header (2)");
                             col.setName(number2excelColumnName(c+1));
                             table.addColumn(col);
-                        }
-                        
-                    } else if (!isHeaderRow) {
+                        }                        
+                    } else if (!isHeaderRow && isDataRow) {
                         // a data row when there is a header: add missing columns
                         for ( ; c < Math.min(table.getNrColumns()-1, cell.getColumnIndex()); c++ ) {
                             missingColumns.add(null);
@@ -489,7 +494,7 @@ public class TableGenerator {
                         debug("Processing Excel column " + (c+1));
                         
                         // new column if 
-                        TableColumn col = (isHeaderRow && firstWorkbook ? new TableColumn(settings) : table.getColumn(c));                    
+                        TableColumn col = (isHeaderRow && firstWorkbook ? new TableColumn(settings) : table.getColumn(c));
 
                         if (isHeaderRow) {
                             // Some names are just numbers, strangely enough (column name 14)
