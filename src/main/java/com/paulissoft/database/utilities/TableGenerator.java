@@ -383,12 +383,10 @@ public class TableGenerator {
      * @param table
      */
     private Boolean writeCsv(Sheet sheet, Table table) throws java.io.IOException {
-
-        ArrayList<HashMap<Integer,String>> dataRows = new ArrayList<HashMap<Integer,String>>();
         HashMap<Integer,String> headerRow = new HashMap<Integer,String>();
         String progress = null;
-
         Iterator<Row> rowIterator = sheet.rowIterator();
+        PrintStream csvFile = null;
             
         while (rowIterator.hasNext()) {
             final Row row = rowIterator.next();
@@ -402,7 +400,7 @@ public class TableGenerator {
             final boolean hasHeader = settings.headerRowFrom > 0;
             final boolean isHeaderRow = hasHeader && row.getRowNum() >= settings.headerRowFrom - 1 && row.getRowNum() <= settings.headerRowTill - 1;
             final boolean isDataRow = !hasHeader || row.getRowNum() > settings.headerRowTill - 1;
-            final boolean firstDataRowAfterHeader = hasHeader && row.getRowNum() == (settings.headerRowTill - 1) + 1;
+            final boolean lastDataRow = hasHeader && row.getRowNum() == settings.headerRowTill - 1;
             
             debug("Processing Excel row " + (row.getRowNum() + 1));
             
@@ -469,36 +467,17 @@ public class TableGenerator {
 
                     headerRow.put(cell.getColumnIndex(), header); // add or replace header
                 } else if (isDataRow) {
-                    if (firstDataRowAfterHeader) {
-                        // add table columns sorted on key
-                        final SortedSet<Integer> keys = new TreeSet<Integer>(headerRow.keySet());
-                        int lastKey = -1;
-                        
-                        for (Integer key : keys) {
-                            final TableColumn col = new TableColumn(settings);                            
-                            final String header = headerRow.get(key);
-
-                            // missing headers get the Excel column A, B, ...
-                            while (++lastKey < key) {
-                                debug("adding column " + (lastKey + 1) + " as header (1)");
-                                col.setName(number2excelColumnName(lastKey));
-                                table.addColumn(col);
-                            }
-                            
-                            debug("adding column " + (cell.getColumnIndex() + 1) + " as header (1)");
-                            col.setName(header);
-                            table.addColumn(col);
-                        }
-                    } else if (!hasHeader && (headerRow.isEmpty() || cell.getColumnIndex() > Collections.max(headerRow.keySet()))) {
+                    if (!hasHeader && (headerRow.isEmpty() || cell.getColumnIndex() > Collections.max(headerRow.keySet()))) {
                         // See note 2a (first part) above.
                         final Integer lastKey = (headerRow.isEmpty() ? -1 : Collections.max(headerRow.keySet()));
-                        final TableColumn col = new TableColumn(settings);                            
-                        final String header = number2excelColumnName(cell.getColumnIndex());
 
                         for (Integer key = lastKey + 1; key <= cell.getColumnIndex(); key++) {
-                            debug("adding column " + (key + 1) + " as header (2a)");
+                            final TableColumn col = new TableColumn(settings);                            
+                            final String header = number2excelColumnName(key);
+
                             headerRow.put(key, header); // add or replace header
                             col.setName(header);
+                            debug("setting header column " + (key + 1) + " to '" + header + "' (1)");
                             table.addColumn(col);
                         }
                         assert(cell.getColumnIndex() == Collections.max(headerRow.keySet()));
@@ -552,22 +531,69 @@ public class TableGenerator {
                     dataRow.put(cell.getColumnIndex(), value);
                 }
             } // while (cellIterator.hasNext()) {
-            
-            if (!isEmptyRow(dataRow)) {
-                if (settings.addMetadata) {
-                    // add two column atthe beginning so move the columns two up
-                    HashMap<Integer,String> newDataRow = new HashMap<Integer,String>();
-                    
-                    newDataRow.put(0, sheet.getSheetName());
-                    newDataRow.put(1, String.valueOf(row.getRowNum() + 1));
 
-                    for (Integer key : dataRow.keySet()) {
-                        newDataRow.put(key + 2, dataRow.get(key));                        
+            // Create table columns
+            if (lastDataRow) {
+                // add table columns sorted on key
+                final SortedSet<Integer> keys = new TreeSet<Integer>(headerRow.keySet());
+                int lastKey = -1;
+                        
+                for (Integer key : keys) {
+                    TableColumn col;
+                    String header;
+
+                    // missing headers get the Excel column A, B, ...
+                    while (++lastKey < key) {
+                        col = new TableColumn(settings);
+                        header = number2excelColumnName(lastKey);
+                        col.setName(header);
+                        
+                        debug("setting header column " + (lastKey + 1) + " to '" + header + "' (2)");
+                        table.addColumn(col);
                     }
-                    
-                    dataRow = newDataRow;
+
+                    col = new TableColumn(settings);                            
+                    header = headerRow.get(key);
+                    col.setName(header);
+
+                    debug("setting header column " + (key + 1) + " to '" + header + "' (3)");
+                    table.addColumn(col);
                 }
-                dataRows.add(dataRow);
+            }
+
+            if (!isEmptyRow(dataRow)) {
+                if (csvFile == null) {
+                    csvFile = open(table.getLocation(), settings.encoding, settings.writeBOM, false);
+                }
+                
+                if (settings.addMetadata) {
+                    csvFile.print(sheet.getSheetName() + table.getFieldSeparator());                    
+                    csvFile.print(String.valueOf(row.getRowNum() + 1) + table.getFieldSeparator());
+                }
+
+                final SortedSet<Integer> keys = new TreeSet<Integer>(dataRow.keySet());
+
+                int lastKey = -1;
+                
+                for (Integer key : keys) {
+                    final String col = dataRow.get(key);
+
+                    // missing columns get a field separator
+                    while (++lastKey < key) {
+                        csvFile.print(table.getFieldSeparator());
+                    }
+
+                    if (key > 0) {
+                        csvFile.print(table.getFieldSeparator());
+                    }
+
+                    csvFile.print(col);
+                }
+
+                while (++lastKey < table.getNrColumns()) {
+                    csvFile.print(table.getFieldSeparator());
+                }
+                csvFile.print(Settings.NL);
             } else {
                 debug("Skipping row " + (row.getRowNum() + 1) + " since it is empty");
             }
@@ -597,48 +623,13 @@ public class TableGenerator {
             table.addColumnFirst(col);            
         }
 
-        if (dataRows.size() > 0) {
-            String csv = "";
-            
-            for (int r = 0; r < dataRows.size(); r++) {
-                final HashMap<Integer,String> row = dataRows.get(r);
-
-                if (r > 0) {
-                    csv += Settings.NL; // always a new line except for the last line
-                }
-
-                final SortedSet<Integer> keys = new TreeSet<Integer>(row.keySet());
-
-                int lastKey = -1;
-                
-                for (Integer key : keys) {
-                    final String col = row.get(key);
-
-                    // missing columns get a field separator
-                    while (++lastKey < key) {
-                        csv += table.getFieldSeparator();
-                    }
-
-                    if (key > 0) {
-                        csv += table.getFieldSeparator();
-                    }
-
-                    csv += col;
-                }
-
-                while (++lastKey < table.getNrColumns()) {
-                    csv += table.getFieldSeparator();
-                }
-            }
-
-            write(csv, table.getLocation(), settings.encoding, settings.writeBOM, false);
-
-            return true;
-        } else {
+        if (csvFile == null) {
             System.out.println("WARNING: Sheet does not contain data");
-            
-            return false;
+        } else {
+            csvFile.close();
         }
+            
+        return csvFile != null;
     } // writeCsv
 
     // columnIndex starting from 1
