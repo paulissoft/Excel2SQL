@@ -45,9 +45,6 @@ Usage: TableGenerator [options] spreadsheet
       Default: 1
     --help, -h
       This help
-    --one-table
-      Each sheet to one table?
-      Default: false
     --sheet-name-expression
       Sheet name(s) must match this regular expression
       Default: .*
@@ -71,7 +68,7 @@ There is just one spreadsheet to process (workbook). Previous versions allowed m
 
 ## Per worksheet
 
-The sheet table name will be the worksheet name except when --one-table is used or --sql-table-name is used.
+The sheet table name will be the worksheet name except when --sql-table-names is used.
 
 ### For every row construct a sparse array of its cell values
 

@@ -53,9 +53,6 @@ class Settings {
     @Parameter(names = "--sql-database", description = "The SQL database (Oracle, PostgresQL)", required = false, validateWith = ValidSqlDatabases.class)
     protected String sqlDatabase = "Oracle";
 
-    @Parameter(names = "--one-table", description = "Each sheet to one table?")
-    protected boolean oneTable = false;
-
     @Parameter(names = "--add-metadata", description = "Add metadata like sheet name and row number (starting from 1) in the CSV?")
     protected boolean addMetadata = false;
 

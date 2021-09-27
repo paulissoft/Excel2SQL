@@ -156,7 +156,7 @@ public class Table {
      */
     public String getDdl()
     {
-        String ddl = "CREATE TABLE " +  getName() +Settings.NL+"("+ Settings.NL;
+        String ddl = "CREATE TABLE " + (settings.sqlDatabase.equals(Settings.POSTGRESQL) ? "IF NOT EXISTS " : "") + getName() + Settings.NL + "(" + Settings.NL;
 		
         Iterator iter = columns.iterator();
         while (iter.hasNext()){

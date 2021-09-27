@@ -105,13 +105,15 @@ public class TableColumn {
      * @return
      */
     private String getSqlType() {
+        final String stringDatatype = (settings.sqlDatabase.equals(Settings.ORACLE) ? "VARCHAR2" : "VARCHAR" );
+        
         // Use SQL ANSI datatypes 
         if (stringLength == 0 && numericLength == 0 && dateLength == 0) {
-            return "VARCHAR(1)";
+            return stringDatatype + "(1)";
         } else if (stringLength > 0 ||
                    (numericLength > 0 && dateLength > 0)) {
             // column includes a non empty string value or both numeric and date values: convert it to VARCHAR2
-            return "VARCHAR(" + Math.max(Math.max(stringLength, numericLength), dateLength) + ")";
+            return stringDatatype + "(" + Math.max(Math.max(stringLength, numericLength), dateLength) + ")";
         } else if (numericLength > 0) {
             // handle numeric precision here???
             return "DECIMAL";
