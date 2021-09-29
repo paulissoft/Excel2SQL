@@ -9,14 +9,15 @@ Reads an Excel Spread work book (file name passed in as an argument).
 
 1. Creates a comma delimited (CSV) file for each work sheet.
 
-2. Creates SQL scripts:
-   * table.sql: to create a table for each work sheet.
+2. Creates these SQL scripts:
+   * create.sql: to create a table for each work sheet.
      For an Oracle database use external table definitions that reference the CSV files on the file system.
      For an PostgresQL database use table definitions.
-   * delete.sql (only for an PostgresQL database):
-     to delete work sheet data before loading.
+   * drop.sql: to drop the table for each work sheet.
    * load.sql (only for an PostgresQL database):
      load the CSV file into the table(s).
+   * delete.sql (only for an PostgresQL database):
+     to delete work sheet data before loading.
 
 # Help
 
@@ -60,6 +61,8 @@ Usage: TableGenerator [options] spreadsheet
     --sql-table-names
       A list of SQL table name(s) to use instead of the sheet name(s)
       Default: []
+    --string-column-size
+      Use this for the string column size and not the maximum Excel data size.
     --verbose
       Level of verbosity
       Default: 1
@@ -130,3 +133,4 @@ I have made the following enhancements to the original code from Casimir Saterno
 * The external table does not create a log file since that grows and grows...
 * PostgreSQL as a database option has been added.
 * Checkstyle has been added.
+* Added a user defined string column size.

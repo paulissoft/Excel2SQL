@@ -117,17 +117,22 @@ public class TableColumn {
              ? "VARCHAR2"
              : "VARCHAR");
 
+        Integer stringColumnSize = settings.stringColumnSize;
+
         // Use SQL ANSI datatypes
         if (stringLength == 0 && numericLength == 0 && dateLength == 0) {
-            return stringDatatype + "(1)";
+            if (stringColumnSize == null) {
+                stringColumnSize = 1;
+            }
+            return stringDatatype + "(" + stringColumnSize + ")";
         } else if (stringLength > 0
                    || (numericLength > 0 && dateLength > 0)) {
             // column includes a non empty string value or
             // both numeric and date values: convert it to VARCHAR2
-            return stringDatatype
-                + "("
-                + Math.max(Math.max(stringLength, numericLength), dateLength)
-                + ")";
+            if (stringColumnSize == null) {
+                stringColumnSize = Math.max(Math.max(stringLength, numericLength), dateLength);
+            }
+            return stringDatatype + "(" + stringColumnSize + ")";
         } else if (numericLength > 0) {
             // handle numeric precision here???
             return "DECIMAL";

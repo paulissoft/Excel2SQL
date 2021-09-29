@@ -108,8 +108,11 @@ public class TableGenerator {
      */
     private HashSet<String> tables; // test unique table names
 
-    /** Tables.sql file descriptor. */
-    private PrintStream tablesSql = null;
+    /** create.sql file descriptor. */
+    private PrintStream createSql = null;
+
+    /** drop.sql file descriptor. */
+    private PrintStream dropSql = null;
 
     /** delete.sql file descriptor. */
     private PrintStream deleteSql = null;
@@ -130,9 +133,11 @@ public class TableGenerator {
 
         info("Using working directory " + new File(Settings.PWD).getAbsolutePath());
 
-        tablesSql = open("tables.sql", "UTF-8", false, false);
+        createSql = open("create.sql", "UTF-8", false, false);
 
-        tablesSql.print(Table.preamble(settings));
+        dropSql = open("drop.sql", "UTF-8", false, false);
+
+        createSql.print(Table.preamble(settings));
 
         if (settings.sqlDatabase.equals(Settings.POSTGRESQL)) {
             deleteSql = open("delete.sql", "UTF-8", false, false);
@@ -179,7 +184,9 @@ public class TableGenerator {
             throw e;
         }
 
-        tablesSql.close();
+        createSql.close();
+
+        dropSql.close();
 
         if (deleteSql != null) {
             deleteSql.close();
@@ -205,7 +212,9 @@ public class TableGenerator {
             debug("Adding DDL for table " + table.getName());
 
             // Add the ddl for the table to the script
-            tablesSql.print(table.getDdl());
+            createSql.print(table.getDdl());
+
+            dropSql.print("DROP TABLE " + table.getName() + ";" + Settings.NL);
 
             if (deleteSql != null) {
                 if (settings.addMetadata) {

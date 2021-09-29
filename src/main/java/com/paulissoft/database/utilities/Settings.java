@@ -22,6 +22,7 @@ class Settings {
 
     /** The Oracle database. */
     static final String ORACLE = "Oracle";
+
     /** The PostgreSQL database. */
     static final String POSTGRESQL = "PostgresQL";
 
@@ -84,6 +85,11 @@ class Settings {
     /** Help? */
     @Parameter(names = { "--help", "-h" }, description = "This help", help = true)
     protected boolean help;
+
+    /** The sql string size. */
+    @Parameter(names = { "--string-column-size"},
+               description = "Use this for the string column size and not the maximum Excel data size.")
+    protected Integer stringColumnSize = null;
 
     /**
      * The Excel Spreadsheet (.xls or .xlsx) that is being accessed.
