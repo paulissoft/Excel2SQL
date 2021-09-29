@@ -441,7 +441,7 @@ public class TableGenerator {
                  *
                  * Now the cell value will be used to update the table column data type.
                  *
-                 * At the end of a data row, print the values to a CSV file (&lt;sheet&gt;.csv)
+                 * At the end of a data row, print the values to a CSV file (<sheet>.csv)
                  * taking care of the holes in the sparse data array.
                  *
                  */
