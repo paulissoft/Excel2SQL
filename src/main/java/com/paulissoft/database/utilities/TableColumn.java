@@ -1,6 +1,3 @@
-/*
- * Created on Dec 14, 2004
- */
 package com.paulissoft.database.utilities;
 
 import java.text.Normalizer;
@@ -10,51 +7,61 @@ import java.text.Normalizer;
  * @version 1.0
  */
 public class TableColumn {
-    
+
     /**
-     * The maximum column length for strings in characters (not bytes)
+     * The maximum column length for strings in characters (not bytes).
      */
     private int stringLength = 0; // at least
+
     /**
-     * The column name
+     * The column name.
      */
     private String name = null;
-	
+
     /**
-     * Column precision for numeric types
+     * Column precision for numeric types.
      */
     private int numericPrecision = 0;
-    
+
     /**
-     * The maximum column length for numbers in characters
+     * The maximum column length for numbers in characters.
      */
     private int numericLength = 0;
-	
+
     /**
-     * The maximum column length for dates in characters
+     * The maximum column length for dates in characters.
      */
     private int dateLength = 0;
-	
-    /**
-     * Spaces for aligning the outputted SQL
-     */
-    private final String SPACES = "  ";
 
+    /**
+     * Spaces for aligning the outputted SQL.
+     */
+    static final String SPACES = "  ";
+
+    /**
+     * The application run-time settings.
+     */
     private Settings settings = null;
 
-    public TableColumn(Settings settings) {
-        this.settings = settings;
+    /**
+     * The constructor.
+     *
+     * @param pSettings  The application run-time settings
+     */
+    public TableColumn(final Settings pSettings) {
+        this.settings = pSettings;
     }
-	
+
     /**
      * @return
-     * 
+     *
      * Returns a line of sql according to the following form:
      *      <column_name>    <column_type>,
      */
     public String getColumnDdl() {
 
-        return SPACES + getName() + SPACES + getSqlType() + "," + Settings.NL;
+        return TableColumn.SPACES + getName() + TableColumn.SPACES
+            + getSqlType() + "," + Settings.NL;
     }
     /**
      * @return
@@ -62,58 +69,65 @@ public class TableColumn {
      *      <column_name>
      */
     public String getColumnLoaderLine() {
-		
-        return SPACES + getName() + "," + Settings.NL;
+
+        return TableColumn.SPACES + getName() + "," + Settings.NL;
     }
-	
+
     /**
-     * @return
+     * @return The maximum length for a value converted to a string.
      */
     public int getStringLength() {
         return stringLength;
     }
 
     /**
-     * @return
+     * @return The (quoted) name of the column.
      */
     public String getName() {
         return (name == null ? null : Settings.QQ + name + Settings.QQ);
     }
-	
+
     /**
-     * @return double
+     * @return The precision of a numeric value.
      */
     public int getNumericPrecision() {
         return numericPrecision;
     }
-    
+
     /**
-     * @return int
+     * @return The numeric length.
      */
     public int getNumericLength() {
         return numericLength;
     }
-    
+
     /**
-     * @return int
+     * @return The date length.
      */
     public int getDateLength() {
         return dateLength;
     }
-    
+
     /**
-     * @return
+     * @return The SQL type (NUMERIC, DATE or STRING).
      */
     private String getSqlType() {
-        final String stringDatatype = (settings.sqlDatabase.equals(Settings.ORACLE) ? "VARCHAR2" : "VARCHAR" );
-        
-        // Use SQL ANSI datatypes 
+        final String stringDatatype =
+            (settings.sqlDatabase.equals(Settings.ORACLE)
+             ? "VARCHAR2"
+             : "VARCHAR");
+
+        // Use SQL ANSI datatypes
         if (stringLength == 0 && numericLength == 0 && dateLength == 0) {
             return stringDatatype + "(1)";
-        } else if (stringLength > 0 ||
-                   (numericLength > 0 && dateLength > 0)) {
-            // column includes a non empty string value or both numeric and date values: convert it to VARCHAR2
-            return stringDatatype + "(" + Math.max(Math.max(stringLength, numericLength), dateLength) + ")";
+        } else if (stringLength > 0
+                   || (numericLength > 0 && dateLength > 0)) {
+            // column includes a non empty string value or
+            // both numeric and date values: convert it to VARCHAR2
+            return stringDatatype
+                + "("
+                + Math.max(Math.max(stringLength, numericLength), dateLength)
+                + ")";
         } else if (numericLength > 0) {
             // handle numeric precision here???
             return "DECIMAL";
@@ -123,41 +137,47 @@ public class TableColumn {
     }
 
     /**
-     * @param stringLength
+     * @param pStringLength  The string length.
      */
-    public void setStringLength(int stringLength) {
-        if (this.stringLength < stringLength)
-            this.stringLength = stringLength;
-    }
-	
-    /**
-     * @param name
-     */
-    public void setName(String name) {
-        this.name = Normalizer.normalize(name, Normalizer.Form.NFD).replaceAll("\\p{M}", "").trim();
-    }
-	
-    /**
-     * @param numericPrecision
-     */
-    public void setNumericPrecision(int numericPrecision) {
-        this.numericPrecision = numericPrecision;
-    }
-	
-    /**
-     * @param numericLength
-     */
-    public void setNumericLength(int numericLength) {
-        if (this.numericLength < numericLength)
-            this.numericLength = numericLength;
+    public void setStringLength(final int pStringLength) {
+        if (this.stringLength < pStringLength) {
+            this.stringLength = pStringLength;
+        }
     }
 
     /**
-     * @param dateLength
+     * @param pName  The column name.
      */
-    public void setDateLength(int dateLength) {
-        if (this.dateLength < dateLength)
-            this.dateLength = dateLength;
+    public void setName(final String pName) {
+        this.name =
+            Normalizer.normalize(pName, Normalizer.Form.NFD)
+            .replaceAll("\\p{M}", "").trim();
     }
-	
+
+    /**
+     * @param pNumericPrecision  The numeric precision to set
+     *                           if longer than the actual
+     */
+    public void setNumericPrecision(final int pNumericPrecision) {
+        this.numericPrecision = pNumericPrecision;
+    }
+
+    /**
+     * @param pNumericLength  The numeric length to set
+     *                        if longer than the actual
+     */
+    public void setNumericLength(final int pNumericLength) {
+        if (this.numericLength < pNumericLength) {
+            this.numericLength = pNumericLength;
+        }
+    }
+
+    /**
+     * @param pDateLength  The date length to set if longer than the actual
+     */
+    public void setDateLength(final int pDateLength) {
+        if (this.dateLength < pDateLength) {
+            this.dateLength = pDateLength;
+        }
+    }
 }

@@ -22,6 +22,7 @@
     <maven-enforcer-plugin.version>3.0.0</maven-enforcer-plugin.version>
     <maven.version>3.6.1</maven.version>
     <checkstyle-maven-plugin.version>3.1.2</checkstyle-maven-plugin.version>
+    <checkstyle.version>9.0</checkstyle.version>
     <opencsv.version>2.4</opencsv.version>
   </properties>
   
@@ -80,18 +81,36 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
       </plugin>
+
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
         <version>${checkstyle-maven-plugin.version}</version>
+        <dependencies>
+            <dependency>
+              <groupId>com.puppycrawl.tools</groupId>
+              <artifactId>checkstyle</artifactId>
+              <version>${checkstyle.version}</version>
+            </dependency>
+          </dependencies>
         <executions>
           <execution>
+            <id>validate</id>
+            <phase>validate</phase>
+            <configuration>
+              <configLocation>src/main/resources/checkstyle.xml</configLocation>
+              <encoding>UTF-8</encoding>
+              <consoleOutput>true</consoleOutput>
+              <failsOnError>true</failsOnError>
+              <linkXRef>false</linkXRef>
+              <includes>**/*.java</includes>
+            </configuration>
             <goals>
               <goal>check</goal>
             </goals>
           </execution>
         </executions>
-      </plugin>
+      </plugin>     
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
