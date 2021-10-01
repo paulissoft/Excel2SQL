@@ -512,7 +512,12 @@ public class TableGenerator {
                             try {
                                 value = getStringValue(cell, col);
                             } catch (IllegalStateException e2) {
-                                value = getBooleanValue(cell, col);
+                                try {
+                                    value = getBooleanValue(cell, col);
+                                } catch  (IllegalStateException e3) {
+                                    // Cannot get a BOOLEAN value from a ERROR formula cell
+                                    value = "";
+                                }
                             }
                         }
                         break;
@@ -536,7 +541,9 @@ public class TableGenerator {
 
                     // see https://en.wikipedia.org/wiki/Comma-separated_values
                     value.replace(table.getEnclosureString(), table.getEnclosureString() + table.getEnclosureString());
-                    if (value.contains(table.getEnclosureString()) || value.contains(table.getFieldSeparator())) {
+                    if (value.contains(table.getEnclosureString())
+                        || value.contains(table.getFieldSeparator())
+                        || /* ERROR:  unquoted newline found in data */ value.contains("\n")) {
                         value = table.getEnclosureString() + value + table.getEnclosureString();
                     }
                     dataRow.put(cell.getColumnIndex(), value);
